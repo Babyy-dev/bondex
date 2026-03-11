@@ -5,10 +5,10 @@ import type { Order } from "@/types";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const status = searchParams.get("status");
+  const status  = searchParams.get("status");
   const hotelId = searchParams.get("hotelId");
 
-  let orders = getOrders();
+  let orders = await getOrders();
   if (status)  orders = orders.filter((o) => o.status === status);
   if (hotelId) orders = orders.filter((o) => o.fromHotelId === hotelId);
 
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     };
 
     order.qrCode = order.id;
-    createOrder(order);
+    await createOrder(order);
 
     // Send confirmation email (non-fatal)
     sendBookingConfirmed(order).catch((err) =>

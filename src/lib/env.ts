@@ -26,6 +26,9 @@ function optionalEnv(name: string, fallback = ""): string {
 // ── Critical — app will not start without these ───────────────────────────
 
 export const env = {
+  // Database
+  MONGODB_URI: requireEnv("MONGODB_URI"),
+
   // Auth
   SESSION_SECRET: requireEnv("SESSION_SECRET"),
 

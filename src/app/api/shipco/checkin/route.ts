@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   try {
     const { orderId, photoUrls } = await req.json();
 
-    const order = getOrder(orderId);
+    const order = await getOrder(orderId);
     if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
     if (order.status !== "PAID") {
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       carrier = "Yamato Transport";
     }
 
-    const updated = updateOrder(orderId, {
+    const updated = await updateOrder(orderId, {
       status: "CHECKED_IN",
       photoUrls: [...(order.photoUrls ?? []), ...(photoUrls ?? [])],
       labelUrl,

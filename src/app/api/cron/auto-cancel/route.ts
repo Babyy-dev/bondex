@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const orders = getOrders();
+  const orders = await getOrders();
   const nowUtc = Date.now();
   const cancelled: string[] = [];
 
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const [y, m, d] = order.deliveryDate.split("-").map(Number);
     const deadlineUtc = Date.UTC(y, m - 1, d, 13, 0, 0); // 22:00 JST = 13:00 UTC
     if (nowUtc > deadlineUtc) {
-      updateOrder(order.id, { status: "AUTO_CANCELLED" });
+      await updateOrder(order.id, { status: "AUTO_CANCELLED" });
       cancelled.push(order.id);
     }
   }

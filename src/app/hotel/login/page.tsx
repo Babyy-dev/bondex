@@ -2,6 +2,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
+import Link from "next/link";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import toast from "react-hot-toast";
@@ -48,8 +50,12 @@ export default function HotelLogin() {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-sm"
       >
-        {/* Language toggle */}
-        <div className="flex justify-end mb-4">
+        {/* Language toggle + back link */}
+        <div className="flex justify-between items-center mb-4">
+          <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-[#7A6252] hover:text-[#1A120B] transition-colors">
+            <ChevronLeft size={16} />
+            Back to BondEx
+          </Link>
           <div className="flex bg-white rounded-xl border border-[#EDE8DF] overflow-hidden">
             {(["EN", "JA"] as const).map((l) => (
               <button key={l} onClick={() => setLang(l)}

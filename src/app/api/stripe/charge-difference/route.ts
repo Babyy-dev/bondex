@@ -10,19 +10,19 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "", {
 export async function POST(req: NextRequest) {
   try {
     const { orderId, newSize } = await req.json();
-    const order = getOrder(orderId);
+    const order = await getOrder(orderId);
     if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
     const diff = getSizeInfo(newSize).price - getSizeInfo(order.size).price;
     if (diff <= 0) {
       // No charge needed — just update size in DB
-      updateOrder(orderId, { size: newSize });
+      await updateOrder(orderId, { size: newSize });
       return NextResponse.json({ charged: false, message: "Size downgraded — no charge per policy" });
     }
 
     if (!order.paymentIntentId) {
       // No payment intent stored — update DB only (demo/manual order)
-      updateOrder(orderId, { size: newSize, totalPrice: order.totalPrice + diff });
+      await updateOrder(orderId, { size: newSize, totalPrice: order.totalPrice + diff });
       return NextResponse.json({ charged: false, message: "No payment intent on record — DB updated only" });
     }
 
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     const customer      = originalPi.customer as string | null;
 
     if (!paymentMethod) {
-      updateOrder(orderId, { size: newSize, totalPrice: order.totalPrice + diff });
+      await updateOrder(orderId, { size: newSize, totalPrice: order.totalPrice + diff });
       return NextResponse.json({ charged: false, message: "No payment method on record — DB updated only" });
     }
 
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       metadata: { orderId, originalSize: order.size, newSize },
     });
 
-    updateOrder(orderId, {
+    await updateOrder(orderId, {
       size: newSize,
       totalPrice: order.totalPrice + diff,
       paymentIntentId: pi.id,

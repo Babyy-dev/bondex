@@ -6,7 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ orderId: string }> }
 ) {
   const { orderId } = await params;
-  const order = getOrder(orderId);
+  const order = await getOrder(orderId);
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
   return NextResponse.json(order);
 }
@@ -18,7 +18,7 @@ export async function PATCH(
   const { orderId } = await params;
   try {
     const updates = await req.json();
-    const order = updateOrder(orderId, updates);
+    const order = await updateOrder(orderId, updates);
     if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
     return NextResponse.json(order);
   } catch (err) {

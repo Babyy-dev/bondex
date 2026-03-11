@@ -2,6 +2,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
+import Link from "next/link";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import toast from "react-hot-toast";
@@ -34,6 +36,12 @@ export default function AdminLogin() {
 
   return (
     <div className="min-h-screen bg-[#FEFCF8] flex flex-col items-center justify-center px-4">
+      <div className="w-full max-w-sm mb-4">
+        <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-[#7A6252] hover:text-[#1A120B] transition-colors">
+          <ChevronLeft size={16} />
+          Back to BondEx
+        </Link>
+      </div>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

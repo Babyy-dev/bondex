@@ -10,7 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ orderId: string }> }
 ) {
   const { orderId } = await params;
-  const order = getOrder(orderId);
+  const order = await getOrder(orderId);
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
   // Return an SVG-based mock label as PDF-like response

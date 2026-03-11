@@ -3,7 +3,7 @@ import { getHotels, createHotel } from "@/lib/db";
 import type { Hotel } from "@/types";
 
 export async function GET() {
-  return NextResponse.json(getHotels());
+  return NextResponse.json(await getHotels());
 }
 
 export async function POST(req: NextRequest) {
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       storageLocation: body.storageLocation,
       operationalNotes: body.operationalNotes,
     };
-    createHotel(hotel);
+    await createHotel(hotel);
     return NextResponse.json(hotel, { status: 201 });
   } catch {
     return NextResponse.json({ error: "Failed to create hotel" }, { status: 500 });

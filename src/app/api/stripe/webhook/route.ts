@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       const pi = event.data.object as Stripe.PaymentIntent;
       const orderId = pi.metadata?.orderId;
       if (orderId) {
-        updateOrder(orderId, { status: "PAID", paymentIntentId: pi.id });
+        await updateOrder(orderId, { status: "PAID", paymentIntentId: pi.id });
         console.log(`Order ${orderId} marked as PAID`);
       }
       break;
@@ -48,10 +48,10 @@ export async function POST(req: NextRequest) {
       const pi = event.data.object as Stripe.PaymentIntent;
       const orderId = pi.metadata?.orderId;
       if (orderId) {
-        const order = getOrder(orderId);
+        const order = await getOrder(orderId);
         // Only cancel if payment never completed
         if (order && order.status === "CREATED") {
-          updateOrder(orderId, { status: "AUTO_CANCELLED" });
+          await updateOrder(orderId, { status: "AUTO_CANCELLED" });
           console.log(`Order ${orderId} AUTO_CANCELLED – payment intent canceled`);
         }
       }
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
       const orderId = (charge.metadata as Record<string, string>)?.orderId
         ?? (charge.payment_intent as Stripe.PaymentIntent | null)?.metadata?.orderId;
       if (orderId) {
-        updateOrder(orderId, { flagged: true });
+        await updateOrder(orderId, { flagged: true });
         console.log(`Order ${orderId} flagged – charge refunded (chargeId: ${charge.id})`);
       }
       break;
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       const charge = dispute.charge as Stripe.Charge | null;
       const orderId = (charge as Stripe.Charge & { metadata?: Record<string, string> })?.metadata?.orderId;
       if (orderId) {
-        updateOrder(orderId, { flagged: true });
+        await updateOrder(orderId, { flagged: true });
         console.warn(`Order ${orderId} flagged – chargeback opened (disputeId: ${dispute.id})`);
       }
       break;
