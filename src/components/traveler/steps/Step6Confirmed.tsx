@@ -1,36 +1,38 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Camera, ExternalLink } from "lucide-react";
 import QRCode from "qrcode";
 import { Button } from "@/components/ui/Button";
-import type { Order } from "@/types";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
+import type { BookingState } from "@/types";
 
-interface Props { orderId: string; }
+interface Props {
+  orderId: string;
+  booking: BookingState;
+}
 
-export function Step6Confirmed({ orderId }: Props) {
-  const [order, setOrder]       = useState<Order | null>(null);
+export function Step6Confirmed({ orderId, booking }: Props) {
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Generate QR code client-side — no API call needed
   useEffect(() => {
-    fetch(`/api/orders/${orderId}`)
-      .then((r) => r.json())
-      .then((o: Order) => {
-        setOrder(o);
-        // Generate real QR code
-        const qrPayload = JSON.stringify({ orderId: o.id, type: "bondex-checkin" });
-        QRCode.toDataURL(qrPayload, {
-          width: 256,
-          margin: 2,
-          color: { dark: "#1A120B", light: "#FFFFFF" },
-          errorCorrectionLevel: "M",
-        }).then(setQrDataUrl).catch(console.error);
-      })
-      .catch(console.error);
+    const qrPayload = JSON.stringify({ orderId, type: "bondex-checkin" });
+    QRCode.toDataURL(qrPayload, {
+      width: 256,
+      margin: 2,
+      color: { dark: "#1A120B", light: "#FFFFFF" },
+      errorCorrectionLevel: "M",
+    }).then(setQrDataUrl).catch(console.error);
   }, [orderId]);
+
+  const destination =
+    booking.toAddress?.facilityName ??
+    booking.toAddress?.city ??
+    "Your destination";
+
+  const deliveryDate = booking.deliveryDate ?? "";
 
   const steps = [
     { icon: "🧳", title: "Bring luggage",   desc: "Take to front desk" },
@@ -60,26 +62,27 @@ export function Step6Confirmed({ orderId }: Props) {
 
       <div className="flex-1 max-w-lg mx-auto w-full px-4 py-6 flex flex-col gap-5">
 
-        {/* Delivery summary */}
-        {order && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-            className="bg-white rounded-3xl p-5 shadow-sm border border-[#EDE8DF] flex flex-col gap-4"
-          >
-            <InfoRow emoji="📍" label="Pickup from"  value={`${order.fromHotel} – Front desk`} />
-            <InfoRow emoji="🎯" label="Deliver to"
-              value={`${order.toAddress.facilityName ?? order.toAddress.city} · ${formatDate(order.deliveryDate)} · Size ${order.size}`} />
+        {/* Delivery summary — built from booking state, no API call */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+          className="bg-white rounded-3xl p-5 shadow-sm border border-[#EDE8DF] flex flex-col gap-4"
+        >
+          <InfoRow emoji="📍" label="Pickup from"
+            value={`${booking.fromHotel} – Front desk`} />
+          <InfoRow emoji="🎯" label="Deliver to"
+            value={`${destination}${deliveryDate ? ` · ${formatDate(deliveryDate)}` : ""} · Size ${booking.size ?? "M"}`} />
+          {deliveryDate && (
             <InfoRow emoji="⏰" label="Check in by"
               value={
                 <span>
-                  {formatDate(order.deliveryDate)} <strong>17:00</strong>
+                  {formatDate(deliveryDate)} <strong>17:00</strong>
                   <span className="text-xs text-[#A89080] ml-1">· Late check-in may delay delivery</span>
                 </span>
               } />
-          </motion.div>
-        )}
+          )}
+        </motion.div>
 
-        {/* QR Code – real scannable code */}
+        {/* QR Code — generated client-side from orderId */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}
           className="bg-white rounded-3xl p-6 shadow-sm border-4 border-[#1A120B] flex flex-col items-center gap-4"

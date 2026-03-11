@@ -63,7 +63,7 @@ function BookContent() {
     update({ step: booking.step - 1 });
   };
 
-  if (confirmedOrder) return <Step6Confirmed orderId={confirmedOrder.id} />;
+  if (confirmedOrder) return <Step6Confirmed orderId={confirmedOrder.id} booking={booking} />;
 
   const slideVariants = {
     enter: (dir: number) => ({ opacity: 0, x: dir > 0 ? 40 : -40 }),

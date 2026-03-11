@@ -1,198 +1,266 @@
 # BondEx — Production Readiness Checklist
 
-This document tracks everything that needs to be done before BondEx is ready for real production use.
-Items are grouped by priority. Complete Critical items before going live.
+> Last updated: 2026-03-11
+> Build status: ✅ Passing (28 routes, 0 TypeScript errors)
+> Stripe: Test keys set on Vercel ✅
+> Ship\&Co: Test keys set on Vercel ✅
+> Database: File-based JSON — NOT production-safe ❌
 
 ---
 
-## STATUS LEGEND
-- [ ] Not started
-- [~] In progress
-- [x] Done
+## LEGEND
+
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | Done and working |
+| ❌ | Not done — blocks production |
+| ⏳ | Deferred — do before go-live |
+| 💡 | Nice to have — post-launch |
 
 ---
 
-## CRITICAL — Must Fix Before Going Live
+## PART 1 — What Is Already Done
 
-### 1. Fix Admin Role Check in Middleware
-**File:** `src/middleware.ts` line 22
-**Problem:** The admin route protection only checks that a session exists. A hotel staff JWT token can access all `/admin/*` pages because there is no `role === "admin"` check.
-**Fix:**
-```typescript
-// Current (broken):
-if (!session) return NextResponse.redirect(new URL("/hotel/login", req.url));
+### Traveler Booking Flow
+- ✅ Step 1 — Size selection (S/M/L/LL), prohibited items, consent checkbox
+- ✅ Step 1 — Optional condition photos upload (max 2, camera capture, preview, remove)
+- ✅ Step 2 — Address entry (search mode + manual mode, popular destinations)
+- ✅ Step 2 — Recipient name field, airport warning for 14:00 flight rule
+- ✅ Step 3 — Date picker (14-day window, earliest badge, auto-scheduled time slot)
+- ✅ Step 4 — Email + confirm email + phone with validation
+- ✅ Step 5 — Stripe payment (accordion layout: wallet buttons at top, always-visible card form)
+- ✅ Step 5 — Apple Pay / Google Pay shown via Stripe PaymentElement
+- ✅ Step 5 — Price summary with estimated max for size adjustment
+- ✅ Step 6 — Real scannable QR code, 3-step instructions, delivery summary, screenshot tip
+- ✅ Booking reads `?hotel=HTL-001` from URL → fetches real hotel name from DB
+- ✅ Exit confirmation modal on Step 1 back
 
-// Fixed:
-if (!session || session.role !== "admin") {
-  return NextResponse.redirect(new URL("/admin/login", req.url));
+### Order Status Page (`/status/[orderId]`)
+- ✅ Real data from DB, status timeline (CREATED → PAID → CHECKED\_IN → … → DELIVERED)
+- ✅ Carrier tracking number with copy button
+- ✅ Terminal state handling (AUTO\_CANCELLED, CARRIER\_REFUSED)
+- ✅ "Order not found" 404 screen for invalid order IDs
+- ✅ Good to know section with contact link
+
+### Hotel Staff Portal
+- ✅ Login with Facility ID + password, JWT session (12h), logout
+- ✅ Order list filtered to the **logged-in hotel's orders only** (via session hotelId)
+- ✅ Hotel name shown dynamically from session (not hardcoded)
+- ✅ EN/JA language switcher on order list and filters
+- ✅ Search by order ID or guest name
+- ✅ Filters: All / Waiting / Checked In / Flagged
+- ✅ Order detail page — view-only, reprint label, flag issue (wired to API)
+- ✅ Scan page — QR scanner (jsQR, real camera), manual ID entry
+- ✅ Scan page — Photo capture (ImageCapture API, desktop fallback)
+- ✅ Scan page — Flag button wired to API
+- ✅ Check-in → Ship\&Co API call → tracking number + label URL saved to order
+- ✅ Ship\&Co non-fatal fallback: mock label if API fails
+
+### Admin Portal
+- ✅ Login (admin / admin123 default, overridable via env)
+- ✅ Dashboard — real stats: earnings (15%), today's orders, revenue, active hotels count (dynamic)
+- ✅ Dashboard — alerts for flagged orders and orders waiting >2 check-ins
+- ✅ Dashboard — recent 5 orders table
+- ✅ Orders table — search + status filter + **date range filter** (from/to)
+- ✅ Order detail — view all fields, evidence photo viewer, label reprint
+- ✅ Order detail — size change (triggers off-session Stripe charge via `/api/stripe/charge-difference`)
+- ✅ Order detail — timeline log
+- ✅ Payments page — shows CREATED (unpaid) orders, Notify CS button
+- ✅ Hotels list — search, active/paused status, carrier, cutoff time
+- ✅ New hotel form — all fields including contact info, collection method, same-day delivery, max items, storage location, operational notes
+
+### API Routes
+- ✅ `POST /api/orders` — create order with `fromHotelId` stored
+- ✅ `GET /api/orders` — list with `?hotelId=` (fixed: was broken, now filters by `fromHotelId`)
+- ✅ `GET/PATCH /api/orders/[orderId]`
+- ✅ `POST /api/stripe/create-payment-intent`
+- ✅ `POST /api/stripe/webhook` — handles succeeded, failed, cancelled, refunded, dispute events
+- ✅ `POST /api/stripe/charge-difference` — off-session charge for size adjustments
+- ✅ `POST /api/shipco/checkin` — real Ship\&Co call with mock fallback
+- ✅ `GET /api/labels/mock/[orderId]` — SVG fallback label
+- ✅ `GET/POST /api/hotels`
+- ✅ `GET /api/hotels/[hotelId]` — single hotel lookup
+- ✅ `POST /api/auth/login` / `POST /api/auth/logout`
+- ✅ `GET /api/auth/me` — returns session payload (hotelId, hotelName, role)
+- ✅ `GET /api/cron/auto-cancel` — auto-cancels expired PAID orders (protected by CRON\_SECRET)
+
+### Infrastructure
+- ✅ JWT auth middleware (`proxy.ts`) protecting hotel and admin routes
+- ✅ `vercel.json` with daily cron at 23:00 JST (`0 14 * * *`)
+- ✅ Secure cookie flag (`secure: true` in production)
+- ✅ File-based JSON DB with seed data (HTL-001, HTL-002, ORD-DEMO1, ORD-DEMO2)
+- ✅ Email templates (booking confirmed, check-in complete, delivered) — silent fallback if no SMTP
+
+---
+
+## PART 2 — What Is NOT Done (Blockers & Remaining Work)
+
+---
+
+### ❌ BLOCKER 1 — Database (Most Critical)
+
+**Problem:** `src/lib/db.ts` writes to `.data/db.json` on the local filesystem.
+On Vercel, the filesystem is **read-only in production**. Every write silently fails or goes to `/tmp` which is wiped between function invocations. All order and hotel data is lost on every new request.
+
+**Impact:** App is completely non-functional for data persistence on Vercel.
+
+**Fix:** Migrate to Prisma + PostgreSQL.
+
+**Recommended provider:** [Neon](https://neon.tech) — free tier, serverless-native, one-click Vercel integration.
+
+**Steps:**
+1. Create a Neon project → copy the `DATABASE_URL` connection string
+2. Install dependencies:
+   ```bash
+   npm install prisma @prisma/client
+   npx prisma init
+   ```
+3. Write `prisma/schema.prisma` (see schema below)
+4. Add `DATABASE_URL` to Vercel environment variables
+5. Replace `src/lib/db.ts` with Prisma version
+6. Run `npx prisma migrate deploy` on first deploy
+7. Seed demo data via `npx prisma db seed`
+
+**Prisma Schema (`prisma/schema.prisma`):**
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Order {
+  id               String   @id
+  status           String
+  size             String
+  fromHotel        String
+  fromHotelId      String?
+  toAddress        Json
+  deliveryDate     String
+  guestName        String
+  guestEmail       String
+  guestPhone       String
+  basePrice        Int
+  totalPrice       Int
+  trackingNumber   String?
+  carrier          String?
+  qrCode           String?
+  destinationType  String
+  paymentIntentId  String?
+  labelUrl         String?
+  shipcoShipmentId String?
+  photoUrls        String[]
+  flagged          Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Hotel {
+  id               String   @id
+  name             String
+  branchName       String?
+  address          String
+  status           String   @default("active")
+  dailyOrderCount  Int      @default(0)
+  carrier          String
+  cutoffTime       String
+  printerType      String
+  labelSize        String
+  contactName      String?
+  contactPhone     String?
+  contactEmail     String?
+  collectionMethod String?
+  sameDayDelivery  Boolean  @default(false)
+  maxDailyItems    Int?
+  storageLocation  String?
+  operationalNotes String?
+  passwordHash     String?
+  createdAt        DateTime @default(now())
 }
 ```
-**Effort:** 15 minutes
+
+**Estimated effort:** 4–6 hours
 
 ---
 
-### 2. Move Hotel Credentials Out of Source Code
-**File:** `src/lib/auth.ts` lines 40–44
-**Problem:** Hotel passwords are stored in plaintext inside the source code. Anyone with repo access can see all passwords. Passwords cannot be changed without a code deploy.
-**Fix:**
-- Add a `password_hash` column to the `Hotel` table in the database
-- Hash passwords with `bcrypt` on hotel creation
-- Replace `HOTEL_CREDS` lookup with a database query + `bcrypt.compare()`
+### ❌ BLOCKER 2 — Hotel Passwords in Source Code
 
-**Packages needed:**
+**Problem:** `src/lib/auth.ts` lines 40–44 — hotel passwords are plaintext strings inside the source code. Anyone with repo access can see all hotel passwords. Passwords cannot be changed without a code redeploy.
+
+**Fix:** Once Prisma is set up, store `passwordHash` (bcrypt) in the `Hotel` table and validate against it.
+
 ```bash
-npm install bcryptjs
-npm install --save-dev @types/bcryptjs
+npm install bcryptjs && npm install --save-dev @types/bcryptjs
 ```
 
-**New validateHotelCreds (example):**
 ```typescript
+// When creating/updating a hotel password:
 import bcrypt from "bcryptjs";
-import { getHotel } from "@/lib/db";
+const passwordHash = await bcrypt.hash(plainPassword, 12);
 
-export async function validateHotelCreds(id: string, password: string) {
-  const hotel = await getHotel(id);
-  if (!hotel || !hotel.passwordHash) return null;
-  const valid = await bcrypt.compare(password, hotel.passwordHash);
-  if (!valid) return null;
-  return { hotelId: hotel.id, hotelName: hotel.name };
-}
+// When validating login:
+const hotel = await prisma.hotel.findUnique({ where: { id: facilityId } });
+const valid = hotel && await bcrypt.compare(password, hotel.passwordHash ?? "");
 ```
-**Effort:** 2–3 hours (including DB migration)
+
+**Estimated effort:** 2–3 hours (after Prisma migration)
 
 ---
 
-### 3. Switch to PostgreSQL Database
-**File:** `src/lib/db.ts`
-**Problem:** The current file-based JSON database does not work on Vercel or any serverless platform. Each function invocation gets a fresh filesystem — data written in one request is invisible to the next.
-**Fix:** Follow `DATABASE_SETUP.md` — install Prisma, define schema, replace `db.ts` with Prisma client.
+### ❌ BLOCKER 3 — Missing Environment Variables
 
-**Steps:**
-- [ ] Install `prisma` and `@prisma/client`
-- [ ] Run `npx prisma init`
-- [ ] Copy schema from `DATABASE_SETUP.md` into `prisma/schema.prisma`
-- [ ] Set `DATABASE_URL` in `.env.local`
-- [ ] Run `npx prisma migrate dev --name init`
-- [ ] Replace `src/lib/db.ts` with Prisma version from `DATABASE_SETUP.md`
-- [ ] Seed hotels with `npx prisma db seed`
-- [ ] Delete `.data/db.json` and verify app still works
+The following env vars are **not set in Vercel** but are required:
 
-**Recommended DB provider:** Neon (free, serverless-compatible, works with Vercel)
-**Effort:** 4–6 hours
+| Variable | Required | Impact if Missing |
+|----------|----------|-------------------|
+| `SESSION_SECRET` | **CRITICAL** | App throws on startup — all auth broken |
+| `CRON_SECRET` | **CRITICAL** | Auto-cancel endpoint is open to anyone on the internet |
+| `STRIPE_WEBHOOK_SECRET` | Important | Webhook events accepted but **not verified** (security risk) |
+| `DATABASE_URL` | Needed after Prisma | App has no persistent DB |
+| `NEXT_PUBLIC_APP_URL` | Minor | Defaults to `localhost:3000` in some places |
 
----
-
-### 4. Add `secure: true` to Session Cookie
-**File:** `src/app/api/auth/login/route.ts` lines 13 and 24
-**Problem:** The session cookie is set without `secure: true`. In production over HTTPS, browsers may still send it over HTTP if a redirect happens.
-**Fix:**
-```typescript
-// Current:
-res.cookies.set(COOKIE, token, { httpOnly: true, sameSite: "lax", maxAge: 60 * 60 * 12 });
-
-// Fixed:
-res.cookies.set(COOKIE, token, {
-  httpOnly: true,
-  sameSite: "lax",
-  maxAge: 60 * 60 * 12,
-  secure: process.env.NODE_ENV === "production",
-});
-```
-**Effort:** 5 minutes
-
----
-
-### 5. Add Rate Limiting to Login Endpoint
-**File:** `src/app/api/auth/login/route.ts`
-**Problem:** No brute-force protection. An attacker can try unlimited passwords against any hotel ID.
-**Fix:** Use `@upstash/ratelimit` with Redis (free tier available), or a simple in-memory counter for single-server deployments.
-
-**Option A — Upstash (works on Vercel serverless):**
+**How to check `SESSION_SECRET`:** Go to Vercel → Project → Settings → Environment Variables. If it's not there, add a random 32-character string, e.g.:
 ```bash
-npm install @upstash/ratelimit @upstash/redis
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
-```typescript
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
-
-const ratelimit = new Ratelimit({
-  redis: Redis.fromEnv(),
-  limiter: Ratelimit.slidingWindow(10, "10 m"), // 10 attempts per 10 minutes
-});
-
-// At top of POST handler:
-const { success } = await ratelimit.limit(req.ip ?? "anonymous");
-if (!success) return NextResponse.json({ error: "Too many attempts" }, { status: 429 });
-```
-
-**Env vars needed:**
-```env
-UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-token
-```
-**Effort:** 1–2 hours
 
 ---
 
-### 6. Add Input Validation with Zod
-**Problem:** All API routes accept any JSON body without validation. Malformed data can cause runtime errors or corrupt the database.
-**Files to update:**
-- `src/app/api/orders/route.ts` (POST)
-- `src/app/api/orders/[orderId]/route.ts` (PATCH)
-- `src/app/api/auth/login/route.ts` (POST)
-- `src/app/api/shipco/checkin/route.ts` (POST)
+### ❌ BLOCKER 4 — Stripe Webhook Not Configured
+
+**Problem:** The webhook endpoint `POST /api/stripe/webhook` exists and handles all events correctly, but Stripe doesn't know to send events to it unless registered in the Stripe Dashboard.
+
+Without this, when a customer pays, the order is marked PAID by the frontend PATCH call — but if the browser closes before that runs, the order stays `CREATED` forever.
 
 **Fix:**
-```bash
-npm install zod
-```
+1. Go to [Stripe Dashboard → Developers → Webhooks](https://dashboard.stripe.com/webhooks)
+2. Click **Add endpoint**
+3. URL: `https://your-vercel-domain.vercel.app/api/stripe/webhook`
+4. Select events: `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`
+5. Copy the **Signing secret** → add as `STRIPE_WEBHOOK_SECRET` in Vercel
 
-**Example for orders POST:**
-```typescript
-import { z } from "zod";
-
-const CreateOrderSchema = z.object({
-  size:            z.enum(["S", "M", "L", "XL"]),
-  fromHotel:       z.string().min(1),
-  deliveryDate:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  guestName:       z.string().min(1),
-  guestEmail:      z.string().email(),
-  guestPhone:      z.string().min(7),
-  basePrice:       z.number().positive(),
-  destinationType: z.enum(["hotel", "airport", "address"]),
-  toAddress:       z.object({
-    postalCode:    z.string().min(5),
-    prefecture:    z.string().min(1),
-    city:          z.string().min(1),
-    street:        z.string().min(1),
-    recipientName: z.string().min(1),
-    facilityName:  z.string().optional(),
-    building:      z.string().optional(),
-  }),
-});
-
-// In POST handler:
-const parsed = CreateOrderSchema.safeParse(await req.json());
-if (!parsed.success) {
-  return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-}
-```
-**Effort:** 3–4 hours
+Do this for **both test mode** (now) and **live mode** (when switching keys).
 
 ---
 
-## IMPORTANT — Fix Soon After Launch
+### ❌ BLOCKER 5 — Photo Upload Has No Real Storage
 
-### 7. Wire Real Photo Upload (S3 / Cloudflare R2)
-**File:** `src/app/hotel/scan/page.tsx`
-**Problem:** The hotel scan page captures a photo using `ImageCapture` but the photo is never uploaded anywhere. The `photoUrls` saved to the order are placeholder strings, not real image URLs.
-**Fix:** Upload the captured blob to S3 or Cloudflare R2 using a presigned URL.
+**Problem:** Hotel staff take a photo during check-in (`hotel/scan`). The photo is captured as a blob URL (`createObjectURL`) which only lives in the browser's memory. It is never uploaded to any server. The `photoUrls` saved to the order are blob URLs or the string `"demo-photo"` — both useless after the page closes.
+
+**Impact:** Evidence photos (the "single source of truth" per requirements) are never actually stored.
+
+**Fix:** Upload captured photo to cloud storage before calling `/api/shipco/checkin`.
+
+**Recommended:** Cloudflare R2 (S3-compatible, no egress fees, free tier 10GB).
 
 **Steps:**
-- [ ] Create S3 bucket or R2 bucket
-- [ ] Create API route `POST /api/upload/presign` that returns a presigned PUT URL
-- [ ] In `hotel/scan/page.tsx`, after photo capture: PUT blob to presigned URL, save the resulting public URL to the order
-- [ ] Add `photoUrls` display in `hotel/orders/[orderId]/page.tsx`
+1. Create an R2 bucket in Cloudflare dashboard
+2. Create API route `POST /api/upload/presign` that returns a presigned PUT URL
+3. In `hotel/scan/page.tsx`: after photo capture, PUT blob to presigned URL, get back the public URL
+4. Pass the real URL in `photoUrls` to the check-in endpoint
 
 **Packages:**
 ```bash
@@ -200,224 +268,196 @@ npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
 ```
 
 **Env vars needed:**
-```env
-AWS_REGION=ap-northeast-1
-AWS_ACCESS_KEY_ID=your-key
-AWS_SECRET_ACCESS_KEY=your-secret
-S3_BUCKET_NAME=bondex-photos
+```
+CLOUDFLARE_R2_ACCOUNT_ID=
+CLOUDFLARE_R2_ACCESS_KEY_ID=
+CLOUDFLARE_R2_SECRET_ACCESS_KEY=
+CLOUDFLARE_R2_BUCKET_NAME=bondex-photos
+CLOUDFLARE_R2_PUBLIC_URL=https://your-bucket.r2.dev
 ```
 
-**Cloudflare R2 is recommended** — same S3-compatible API, no egress fees, generous free tier.
-**Effort:** 3–4 hours
+**Estimated effort:** 3–4 hours
 
 ---
 
-### 8. Read Hotel Name from JWT Session (not hardcoded)
-**File:** `src/app/hotel/orders/page.tsx` line 60
-**Problem:** The hotel name shown in the header is hardcoded as `"Sakura Hotel Shinjuku"` regardless of which hotel staff is logged in.
-**Fix:** Read `hotelName` from the JWT session on the server and pass it as a prop, or call a `/api/auth/me` endpoint from the client.
+### ⏳ BEFORE GO-LIVE — Switch to Live Keys
 
-**Quick fix — add `/api/auth/me` route:**
-```typescript
-// src/app/api/auth/me/route.ts
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+When you are ready to accept real payments:
 
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  return NextResponse.json(session);
-}
-```
+**Stripe:**
+1. Go to Stripe Dashboard → toggle to **Live mode**
+2. Replace `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` in Vercel with live keys
+3. Register a new webhook for live mode and update `STRIPE_WEBHOOK_SECRET`
 
-Then in `hotel/orders/page.tsx`:
-```typescript
-const [hotelName, setHotelName] = useState("Hotel");
-useEffect(() => {
-  fetch("/api/auth/me").then(r => r.json()).then(s => setHotelName(s.hotelName));
-}, []);
-```
-**Effort:** 1 hour
+**Ship\&Co:**
+1. Replace `SHIPCO_API_KEY` in Vercel with your production credentials
+
+No code changes needed — the app is already configured to use env vars.
 
 ---
 
-### 9. Add Pagination to Admin Orders Page
-**File:** `src/app/admin/orders/page.tsx`
-**Problem:** All orders are loaded in a single API call. With 500+ orders this will be slow and expensive.
-**Fix:** Add `?page=1&limit=20` query params to `GET /api/orders` and implement cursor-based or offset pagination.
+### ⏳ BEFORE GO-LIVE — Set Up Email (SMTP)
 
-**API change:**
-```typescript
-// src/app/api/orders/route.ts
-const page  = Number(searchParams.get("page")  ?? 1);
-const limit = Number(searchParams.get("limit") ?? 20);
-const all   = getOrders();
-const paginated = all.slice((page - 1) * limit, page * limit);
-return NextResponse.json({ orders: paginated, total: all.length, page, limit });
+**Problem:** All transactional emails (booking confirmed, check-in complete, delivered) are silently discarded with a `console.log` because no SMTP is configured.
+
+**Recommended provider:** [Resend](https://resend.com) — 3,000 free emails/month, extremely simple, Next.js-native.
+
+**Env vars to add in Vercel:**
 ```
-**Effort:** 2–3 hours
-
----
-
-### 10. Add React Error Boundaries
-**Problem:** An uncaught JavaScript error on any page shows a blank white screen with no feedback.
-**Fix:** Wrap each portal (traveler, hotel, admin) in an error boundary component.
-
-**Create `src/components/ErrorBoundary.tsx`:**
-```typescript
-"use client";
-import { Component, ReactNode } from "react";
-
-export class ErrorBoundary extends Component<
-  { children: ReactNode; fallback?: ReactNode },
-  { hasError: boolean }
-> {
-  state = { hasError: false };
-  static getDerivedStateFromError() { return { hasError: true }; }
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback ?? (
-        <div className="min-h-screen flex items-center justify-center text-center px-4">
-          <div>
-            <p className="text-2xl font-black text-[#1A120B] mb-2">Something went wrong</p>
-            <p className="text-sm text-[#A89080] mb-4">Please refresh the page.</p>
-            <button onClick={() => this.setState({ hasError: false })}
-              className="px-6 py-2 bg-[#1A120B] text-white rounded-xl text-sm">
-              Try again
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
+SMTP_HOST=smtp.resend.com
+SMTP_PORT=465
+SMTP_USER=resend
+SMTP_PASS=re_your_api_key_here
+SMTP_FROM=BondEx <noreply@yourdomain.com>
 ```
-**Effort:** 1–2 hours
+
+You must also verify your sending domain in Resend's dashboard.
+
+**Estimated effort:** 30 minutes
 
 ---
 
-## NICE TO HAVE — Post-Launch Improvements
+### ⏳ BEFORE GO-LIVE — Hotel Login URL on QR Codes
 
-### 11. Admin Hotel Edit Page
-**Missing page:** `/admin/hotels/[id]`
-**What it needs:** Form to edit hotel name, address, carrier, cutoff time, status (active/paused).
-The "Hotels" nav link in the admin sidebar goes to `/admin/hotels` (list) but there is no detail/edit page.
-**Effort:** 2–3 hours
+**Problem:** The booking page reads `?hotel=HTL-001` from the URL to set which hotel the booking is coming from. In production, each hotel's lobby QR code must point to the correct URL:
 
----
-
-### 12. Google Places Autocomplete for Address Step
-**File:** `src/components/traveler/steps/Step2Address.tsx`
-**Problem:** Address entry is manual text fields. Guests can type anything — invalid postal codes, wrong prefecture, etc.
-**Fix:** Integrate Google Places Autocomplete API. `NEXT_PUBLIC_GOOGLE_PLACES_API_KEY` is already in `.env.local`.
-
-**Package:**
-```bash
-npm install @vis.gl/react-google-maps
 ```
-**Effort:** 3–4 hours
+https://your-domain.vercel.app/book?hotel=HTL-001   ← Sakura Hotel Shinjuku
+https://your-domain.vercel.app/book?hotel=HTL-002   ← Maple Inn Asakusa
+```
+
+If a traveler visits `/book` without the `?hotel=` param, `fromHotel` defaults to `"Sakura Hotel Shinjuku"` and `fromHotelId` is blank — orders won't show up in the correct hotel's portal.
+
+**Fix options:**
+- A) Generate and print the correct QR code for each hotel (simplest — no code change)
+- B) Add a hotel selection screen if `?hotel=` is missing (requires 1–2 hours of code)
 
 ---
 
-### 13. Full Japanese / English i18n
-**Problem:** The hotel portal has an EN/JA language toggle but most strings are still hardcoded in English. The traveler booking flow is English only.
-**Fix:** Extract all strings into a translation file using `next-intl`.
+### ⏳ IMPORTANT — Add Rate Limiting to Login
+
+**Problem:** `/api/auth/login` has no brute-force protection. Anyone can try unlimited passwords against any hotel ID.
+
+**Fix:** Use `@upstash/ratelimit` with Redis (free tier available on Upstash).
 
 ```bash
-npm install next-intl
+npm install @upstash/ratelimit @upstash/redis
 ```
-**Effort:** 1–2 days
+
+**Env vars:**
+```
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+```
+
+Limit: 10 attempts per 10 minutes per IP.
+**Estimated effort:** 1–2 hours
 
 ---
 
-### 14. SMS Notifications
-**Problem:** Email-only notifications. Guests in Japan may not check email promptly.
-**Fix:** Add Twilio or AWS SNS for SMS at key events (booking confirmed, checked in, delivered).
+### ⏳ IMPORTANT — Add Zod Input Validation
 
-**Env vars needed:**
-```env
-TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=your-auth-token
-TWILIO_FROM_NUMBER=+15551234567
+**Problem:** All API routes accept any JSON body without validation. Malformed or malicious data can cause runtime crashes or DB corruption.
+
+**Files to update:** `POST /api/orders`, `PATCH /api/orders/[orderId]`, `POST /api/auth/login`, `POST /api/shipco/checkin`
+
+```bash
+npm install zod
 ```
-**Effort:** 2–3 hours
+
+**Estimated effort:** 2–3 hours
 
 ---
 
-### 15. Audit Log for Admin Actions
-**Problem:** No record of who changed an order status, who flagged an order, or who edited hotel settings.
-**Fix:** Add an `AuditLog` table in Prisma and write a log entry on every admin PATCH action.
+### ⏳ IMPORTANT — Add Pagination to Orders API
 
-**Schema addition:**
-```prisma
-model AuditLog {
-  id        Int      @id @default(autoincrement())
-  orderId   String?
-  hotelId   String?
-  action    String
-  detail    String?
-  userId    String
-  createdAt DateTime @default(now())
-}
-```
-**Effort:** 3–4 hours
+**Problem:** `GET /api/orders` returns ALL orders in one call. With 500+ orders, this will be slow and memory-heavy.
+
+**Fix:** Add `?page=1&limit=20` to the API and update the admin orders page to paginate.
+
+**Estimated effort:** 2–3 hours
 
 ---
 
-### 16. Vercel Deployment Configuration
-**File to create:** `vercel.json`
-**What's needed:**
+## PART 3 — Nice to Have (Post-Launch)
 
-```json
-{
-  "buildCommand": "npx prisma generate && npx prisma migrate deploy && next build",
-  "env": {
-    "DATABASE_URL": "@database-url",
-    "SESSION_SECRET": "@session-secret",
-    "STRIPE_SECRET_KEY": "@stripe-secret-key",
-    "STRIPE_WEBHOOK_SECRET": "@stripe-webhook-secret",
-    "SHIPCO_API_KEY": "@shipco-api-key",
-    "SMTP_HOST": "@smtp-host",
-    "SMTP_USER": "@smtp-user",
-    "SMTP_PASS": "@smtp-pass"
-  }
-}
-```
-
-**Deployment checklist:**
-- [ ] Push code to GitHub
-- [ ] Connect repo to Vercel
-- [ ] Add all env vars in Vercel dashboard
-- [ ] Set `NEXT_PUBLIC_APP_URL` to the Vercel production URL
-- [ ] Update Stripe webhook endpoint URL to production URL
-- [ ] Verify Ship&Co webhook if applicable
-- [ ] Test full booking flow end-to-end on production
-
-**Effort:** 2–3 hours
+| # | Feature | Notes | Effort |
+|---|---------|-------|--------|
+| 1 | **Google Places API for address search** | Replace 5 hardcoded destinations with real Places Autocomplete | 3–4 hrs |
+| 2 | **Admin hotel edit page** (`/admin/hotels/[id]`) | Edit hotel name, address, carrier, cutoff, status | 2–3 hrs |
+| 3 | **Status page auto-polling** | Poll every 30s instead of manual refresh | 30 min |
+| 4 | **Manual tracking number in admin** | CS can enter a tracking number when Ship\&Co fails | 1 hr |
+| 5 | **Hotel orders — today's orders bold** | Highlight today's orders in the list | 30 min |
+| 6 | **Hotel orders — status legend** | Collapsible color+icon guide at top of order list | 1 hr |
+| 7 | **Hotel exception screen** | Dedicated screen for damaged QR code reallocation | 2–3 hrs |
+| 8 | **Handwritten slip mode in admin** | Fail-safe for printer malfunction | 3–4 hrs |
+| 9 | **Full EN/JA i18n** | Extract all strings to translation files via `next-intl` | 1–2 days |
+| 10 | **SMS notifications** | Twilio/SNS for booking confirmed + delivered | 2–3 hrs |
+| 11 | **React error boundaries** | Prevent blank white screens on JS errors | 1–2 hrs |
+| 12 | **Audit log** | Record every admin action (size change, flag, status update) | 3–4 hrs |
+| 13 | **Hotel staff password change UI** | Self-service password reset for hotel accounts | 2–3 hrs |
 
 ---
 
-## EFFORT SUMMARY
+## PART 4 — Full Environment Variables Reference
 
-| Priority | Item | Effort |
-|---|---|---|
-| Critical | 1. Fix admin role check | 15 min |
-| Critical | 2. Move hotel creds to DB | 2–3 hrs |
-| Critical | 3. Switch to PostgreSQL | 4–6 hrs |
-| Critical | 4. Add `secure` flag to cookie | 5 min |
-| Critical | 5. Rate limit login endpoint | 1–2 hrs |
-| Critical | 6. Zod input validation | 3–4 hrs |
-| Important | 7. Real photo upload (S3/R2) | 3–4 hrs |
-| Important | 8. Hotel name from session | 1 hr |
-| Important | 9. Pagination for orders | 2–3 hrs |
-| Important | 10. React error boundaries | 1–2 hrs |
-| Nice to have | 11. Admin hotel edit page | 2–3 hrs |
-| Nice to have | 12. Google Places autocomplete | 3–4 hrs |
-| Nice to have | 13. Full i18n (EN/JA) | 1–2 days |
-| Nice to have | 14. SMS notifications | 2–3 hrs |
-| Nice to have | 15. Audit log | 3–4 hrs |
-| Nice to have | 16. Vercel deployment config | 2–3 hrs |
+| Variable | Where to get it | Required | Currently set |
+|----------|----------------|----------|---------------|
+| `SESSION_SECRET` | Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` | **CRITICAL** | ❓ Verify |
+| `STRIPE_SECRET_KEY` | Stripe Dashboard → API Keys | **CRITICAL** | ✅ (test) |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe Dashboard → API Keys | **CRITICAL** | ✅ (test) |
+| `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Webhooks → Signing secret | Important | ❌ Not set |
+| `SHIPCO_API_KEY` | Ship\&Co account settings | Important | ✅ (test) |
+| `SHIPCO_API_BASE_URL` | `https://app.shipandco.com/api/v1` | Optional | ✅ (default) |
+| `DATABASE_URL` | Neon / Supabase / Vercel Postgres | **CRITICAL** (after Prisma) | ❌ Not set |
+| `CRON_SECRET` | Generate any random string | Important | ❌ Not set |
+| `SMTP_HOST` | Resend: `smtp.resend.com` | Optional | ❌ Not set |
+| `SMTP_PORT` | Resend: `465` | Optional | ❌ Not set |
+| `SMTP_USER` | Resend: `resend` | Optional | ❌ Not set |
+| `SMTP_PASS` | Your Resend API key | Optional | ❌ Not set |
+| `SMTP_FROM` | `BondEx <noreply@yourdomain.com>` | Optional | ❌ Not set |
+| `NEXT_PUBLIC_APP_URL` | Your Vercel domain URL | Optional | ❌ Not set |
+| `HOTEL_HTL001_PASS` | Set any password for HTL-001 | Optional (temp) | ❌ (using default `demo123`) |
+| `HOTEL_HTL002_PASS` | Set any password for HTL-002 | Optional (temp) | ❌ (using default `demo123`) |
+| `ADMIN_USERNAME` | Your admin username | Optional (temp) | ❌ (using default `admin`) |
+| `ADMIN_PASSWORD` | Your admin password | Optional (temp) | ❌ (using default `admin123`) |
 
-**Critical items total:** ~12 hours
-**All items total:** ~3–4 days of work
+---
+
+## PART 5 — Recommended Go-Live Order
+
+```
+Step 1 (Now)
+  → Set SESSION_SECRET in Vercel
+  → Set CRON_SECRET in Vercel
+  → Change HOTEL and ADMIN default passwords via env vars
+  → Register Stripe webhook, set STRIPE_WEBHOOK_SECRET
+
+Step 2 (Prisma Migration — most effort)
+  → Set up Neon PostgreSQL
+  → Migrate db.ts to Prisma
+  → Move hotel passwords to DB (bcrypt)
+  → Deploy and verify data persists
+
+Step 3 (Before accepting users)
+  → Set up Cloudflare R2 for photo uploads
+  → Set up Resend for transactional emails
+  → Generate hotel QR codes with correct ?hotel= URLs
+  → Add rate limiting to login endpoint
+
+Step 4 (Go live)
+  → Switch Stripe to live keys
+  → Switch Ship&Co to live credentials
+  → Create live Stripe webhook
+  → Run full end-to-end test on production
+
+Step 5 (Post-launch)
+  → Add Zod input validation
+  → Add pagination to orders API
+  → Google Places autocomplete
+  → Other nice-to-haves from Part 3
+```
+
+---
+
+*BondEx v1 — Internal development document*
