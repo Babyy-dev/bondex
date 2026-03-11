@@ -173,10 +173,10 @@ export function Step5Payment({ booking, onSuccess }: Props) {
 
         // 2. Create Stripe PaymentIntent (only if Stripe is configured)
         if (stripePromise) {
-          const intentRes = await fetch("/api/stripe/create-intent", {
+          const intentRes = await fetch("/api/stripe/create-payment-intent", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ size: booking.size, orderId: order.id }),
+            body: JSON.stringify({ size: booking.size, orderId: order.id, guestEmail: booking.guestEmail }),
           });
           if (!intentRes.ok) throw new Error("Failed to create payment intent");
           const { clientSecret: secret } = await intentRes.json();

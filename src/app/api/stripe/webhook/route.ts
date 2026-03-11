@@ -29,10 +29,7 @@ export async function POST(req: NextRequest) {
       const pi = event.data.object as Stripe.PaymentIntent;
       const orderId = pi.metadata?.orderId;
       if (orderId) {
-        updateOrder(orderId, {
-          status: "PAID",
-          paymentIntentId: pi.id,
-        });
+        updateOrder(orderId, { status: "PAID", paymentIntentId: pi.id });
         console.log(`Order ${orderId} marked as PAID`);
       }
       break;
@@ -42,8 +39,64 @@ export async function POST(req: NextRequest) {
       const pi = event.data.object as Stripe.PaymentIntent;
       const orderId = pi.metadata?.orderId;
       if (orderId) {
-        console.warn(`Payment failed for order ${orderId}`);
-        // Delivery is NOT stopped per spec – CS handles it
+        console.warn(`Payment failed for order ${orderId} – CS to handle`);
+      }
+      break;
+    }
+
+    case "payment_intent.canceled": {
+      const pi = event.data.object as Stripe.PaymentIntent;
+      const orderId = pi.metadata?.orderId;
+      if (orderId) {
+        const order = getOrder(orderId);
+        // Only cancel if payment never completed
+        if (order && order.status === "CREATED") {
+          updateOrder(orderId, { status: "AUTO_CANCELLED" });
+          console.log(`Order ${orderId} AUTO_CANCELLED – payment intent canceled`);
+        }
+      }
+      break;
+    }
+
+    case "payment_intent.requires_action": {
+      const pi = event.data.object as Stripe.PaymentIntent;
+      const orderId = pi.metadata?.orderId;
+      if (orderId) {
+        console.warn(`Order ${orderId} requires customer action (3DS) – paymentIntentId: ${pi.id}`);
+      }
+      break;
+    }
+
+    case "charge.refunded": {
+      const charge = event.data.object as Stripe.Charge;
+      const orderId = (charge.metadata as Record<string, string>)?.orderId
+        ?? (charge.payment_intent as Stripe.PaymentIntent | null)?.metadata?.orderId;
+      if (orderId) {
+        updateOrder(orderId, { flagged: true });
+        console.log(`Order ${orderId} flagged – charge refunded (chargeId: ${charge.id})`);
+      }
+      break;
+    }
+
+    case "charge.dispute.created": {
+      const dispute = event.data.object as Stripe.Dispute;
+      const charge = dispute.charge as Stripe.Charge | null;
+      const orderId = (charge as Stripe.Charge & { metadata?: Record<string, string> })?.metadata?.orderId;
+      if (orderId) {
+        updateOrder(orderId, { flagged: true });
+        console.warn(`Order ${orderId} flagged – chargeback opened (disputeId: ${dispute.id})`);
+      }
+      break;
+    }
+
+    case "charge.dispute.closed": {
+      const dispute = event.data.object as Stripe.Dispute;
+      const charge = dispute.charge as Stripe.Charge | null;
+      const orderId = (charge as Stripe.Charge & { metadata?: Record<string, string> })?.metadata?.orderId;
+      if (orderId) {
+        console.log(
+          `Order ${orderId} dispute closed – status: ${dispute.status} (disputeId: ${dispute.id})`
+        );
       }
       break;
     }
