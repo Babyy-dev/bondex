@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Camera } from "lucide-react";
 import { SIZES } from "@/lib/pricing";
 import { SizeCard } from "@/components/traveler/SizeCard";
 import { SizeModal } from "@/components/traveler/SizeModal";
@@ -92,6 +92,49 @@ export function Step1Luggage({ booking, update, onNext }: Props) {
         If the carrier measures a different size, the price adjusts automatically.
         Delivery will not be stopped.
       </p>
+
+      {/* Condition photos — optional, max 2 */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-[#44342A]">Luggage photos <span className="text-[#A89080] font-normal">(optional)</span></p>
+          <span className="text-xs text-[#A89080]">{booking.conditionPhotos.length}/2</span>
+        </div>
+        <p className="text-xs text-[#7A6252]">Help hotel staff identify your luggage. Not required.</p>
+
+        <div className="flex gap-3">
+          {booking.conditionPhotos.map((url, i) => (
+            <div key={i} className="relative w-20 h-20 rounded-2xl overflow-hidden border border-[#EDE8DF]">
+              <img src={url} alt={`Luggage photo ${i + 1}`} className="w-full h-full object-cover" />
+              <button
+                onClick={() => update({ conditionPhotos: booking.conditionPhotos.filter((_, idx) => idx !== i) })}
+                className="absolute top-1 right-1 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center text-white text-[10px]"
+              >✕</button>
+            </div>
+          ))}
+          {booking.conditionPhotos.length < 2 && (
+            <label className="w-20 h-20 rounded-2xl border-2 border-dashed border-[#EDE8DF] flex flex-col items-center justify-center cursor-pointer hover:border-[#C8A96E] transition-colors bg-white">
+              <Camera size={18} className="text-[#A89080] mb-1" />
+              <span className="text-[10px] text-[#A89080]">Add photo</span>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    update({ conditionPhotos: [...booking.conditionPhotos, reader.result as string] });
+                  };
+                  reader.readAsDataURL(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
+        </div>
+      </div>
 
       {/* Consent */}
       <label className={cn(

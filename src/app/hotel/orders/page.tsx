@@ -30,11 +30,13 @@ const FILTERS: { key: Filter; en: string; ja: string }[] = [
 ];
 
 export default function HotelOrdersPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [filter, setFilter] = useState<Filter>("all");
-  const [query,  setQuery]  = useState("");
-  const [loading,setLoading]= useState(true);
-  const [lang,   setLang]   = useState<"EN"|"JA">("EN");
+  const [orders,    setOrders]    = useState<Order[]>([]);
+  const [filter,    setFilter]    = useState<Filter>("all");
+  const [query,     setQuery]     = useState("");
+  const [loading,   setLoading]   = useState(true);
+  const [lang,      setLang]      = useState<"EN"|"JA">("EN");
+  const [hotelId,   setHotelId]   = useState<string>("");
+  const [hotelName, setHotelName] = useState<string>("Hotel");
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -42,11 +44,27 @@ export default function HotelOrdersPage() {
     router.push("/hotel/login");
   };
 
-  const load = () => {
+  const load = (hid = hotelId) => {
+    if (!hid) return;
     setLoading(true);
-    fetch("/api/orders").then((r) => r.json()).then(setOrders).catch(console.error).finally(() => setLoading(false));
+    fetch(`/api/orders?hotelId=${hid}`)
+      .then((r) => r.json())
+      .then(setOrders)
+      .catch(console.error)
+      .finally(() => setLoading(false));
   };
-  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((session) => {
+        setHotelId(session.hotelId);
+        setHotelName(session.hotelName ?? "Hotel");
+        load(session.hotelId);
+      })
+      .catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = orders.filter((o) => {
     if (filter === "flagged")  return o.flagged;
@@ -64,7 +82,7 @@ export default function HotelOrdersPage() {
       <div className="bg-[#1A120B] text-white px-4 pt-10 pb-5">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-black">Sakura Hotel Shinjuku</h1>
+            <h1 className="text-lg font-black">{hotelName}</h1>
             <p className="text-white/50 text-sm">Today's Pickup List</p>
           </div>
           <div className="flex items-center gap-2">
@@ -76,7 +94,7 @@ export default function HotelOrdersPage() {
                 </button>
               ))}
             </div>
-            <button onClick={load} className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center hover:bg-white/20 transition-colors">
+            <button onClick={() => load(hotelId)} className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center hover:bg-white/20 transition-colors">
               <RefreshCw size={15} />
             </button>
             <button onClick={handleLogout} title="Logout" className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center hover:bg-white/20 transition-colors">

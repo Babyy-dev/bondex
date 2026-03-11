@@ -32,6 +32,8 @@ function StatCard({ label, value, sub, icon, bg }: {
 
 export default function AdminDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [activeHotels, setActiveHotels] = useState(0);
+  const [pausedHotels, setPausedHotels] = useState(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -42,7 +44,18 @@ export default function AdminDashboard() {
 
   const load = () => {
     setLoading(true);
-    fetch("/api/orders").then((r) => r.json()).then(setOrders).catch(console.error).finally(() => setLoading(false));
+    Promise.all([
+      fetch("/api/orders").then((r) => r.json()),
+      fetch("/api/hotels").then((r) => r.json()),
+    ])
+      .then(([ordersData, hotelsData]) => {
+        setOrders(ordersData);
+        const hotels = Array.isArray(hotelsData) ? hotelsData : [];
+        setActiveHotels(hotels.filter((h: { status: string }) => h.status === "active").length);
+        setPausedHotels(hotels.filter((h: { status: string }) => h.status === "paused").length);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
 
@@ -107,7 +120,7 @@ export default function AdminDashboard() {
               icon={<Package size={18} className="text-blue-600" />} bg="bg-blue-50" />
             <StatCard label="Revenue" value={formatCurrency(revenue)} sub="Delivered orders"
               icon={<TrendingUp size={18} className="text-emerald-600" />} bg="bg-emerald-50" />
-            <StatCard label="Hotels Active" value="2" sub="0 paused"
+            <StatCard label="Hotels Active" value={String(activeHotels)} sub={`${pausedHotels} paused`}
               icon={<Hotel size={18} className="text-orange-600" />} bg="bg-orange-50" />
           </div>
 

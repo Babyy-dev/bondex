@@ -31,12 +31,14 @@ export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
   const [query,  setQuery]  = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo,   setDateTo]   = useState("");
 
   useEffect(() => {
     fetch("/api/orders").then((r) => r.json()).then(setOrders).catch(console.error);
   }, []);
 
-  const filtered = orders.filter((o) => {
+  let filtered = orders.filter((o) => {
     if (filter !== "all" && o.status !== filter) return false;
     if (query) {
       const q = query.toLowerCase();
@@ -44,6 +46,8 @@ export default function AdminOrdersPage() {
     }
     return true;
   });
+  if (dateFrom) filtered = filtered.filter(o => o.createdAt >= dateFrom);
+  if (dateTo)   filtered = filtered.filter(o => o.createdAt <= dateTo + "T23:59:59");
 
   return (
     <div className="min-h-screen bg-[#FEFCF8]">
@@ -75,6 +79,18 @@ export default function AdminOrdersPage() {
               {f.label}
             </button>
           ))}
+        </div>
+
+        <div className="flex gap-3 items-center">
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-[#EDE8DF] text-sm text-[#1A120B] bg-white focus:outline-none focus:ring-2 focus:ring-[#C8A96E]/30" />
+          <span className="text-xs text-[#A89080]">to</span>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-[#EDE8DF] text-sm text-[#1A120B] bg-white focus:outline-none focus:ring-2 focus:ring-[#C8A96E]/30" />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }}
+              className="text-xs text-[#A89080] hover:text-[#1A120B]">Clear</button>
+          )}
         </div>
 
         <div className="bg-white rounded-3xl shadow-sm border border-[#EDE8DF] overflow-hidden">

@@ -9,8 +9,8 @@ export async function GET(req: NextRequest) {
   const hotelId = searchParams.get("hotelId");
 
   let orders = getOrders();
-  if (status) orders = orders.filter((o) => o.status === status);
-  if (hotelId) orders = orders.filter((o) => o.fromHotel.includes(hotelId));
+  if (status)  orders = orders.filter((o) => o.status === status);
+  if (hotelId) orders = orders.filter((o) => o.fromHotelId === hotelId);
 
   return NextResponse.json(orders);
 }
@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
       status: "CREATED",
       size: body.size,
       fromHotel: body.fromHotel ?? "Sakura Hotel Shinjuku",
+      fromHotelId: body.fromHotelId,
       toAddress: body.toAddress,
       deliveryDate: body.deliveryDate,
       guestName: body.guestName,

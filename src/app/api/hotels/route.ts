@@ -20,6 +20,14 @@ export async function POST(req: NextRequest) {
       cutoffTime: body.cutoffTime ?? "17:00",
       printerType: body.printerType ?? "bluetooth_thermal",
       labelSize: body.labelSize ?? "62mm",
+      contactName: body.contactName,
+      contactPhone: body.contactPhone,
+      contactEmail: body.contactEmail,
+      collectionMethod: body.collectionMethod,
+      sameDayDelivery: body.sameDayDelivery,
+      maxDailyItems: body.maxDailyItems,
+      storageLocation: body.storageLocation,
+      operationalNotes: body.operationalNotes,
     };
     createHotel(hotel);
     return NextResponse.json(hotel, { status: 201 });

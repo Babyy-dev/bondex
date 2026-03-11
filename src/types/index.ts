@@ -38,6 +38,7 @@ export interface Order {
   status: OrderStatus;
   size: LuggageSize;
   fromHotel: string;
+  fromHotelId?: string;
   toAddress: Address;
   deliveryDate: string;
   guestName: string;
@@ -69,6 +70,14 @@ export interface Hotel {
   cutoffTime: string;
   printerType: "bluetooth_thermal" | "usb_thermal" | "none";
   labelSize: "62mm" | "100mm";
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  collectionMethod?: "fixed_time" | "on_demand" | "drop_off";
+  sameDayDelivery?: boolean;
+  maxDailyItems?: number;
+  storageLocation?: string;
+  operationalNotes?: string;
 }
 
 export interface BookingState {
@@ -83,5 +92,6 @@ export interface BookingState {
   guestPhone?: string;
   agreedToTerms: boolean;
   fromHotel: string;
+  fromHotelId?: string;
   destinationType?: DestinationType;
 }

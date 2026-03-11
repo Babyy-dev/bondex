@@ -1,9 +1,9 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, X } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { StepIndicator } from "@/components/ui/StepIndicator";
 import { Step1Luggage }   from "@/components/traveler/steps/Step1Luggage";
 import { Step2Address }   from "@/components/traveler/steps/Step2Address";
@@ -15,22 +15,38 @@ import type { BookingState } from "@/types";
 
 const STEPS = ["Luggage", "Address", "Date", "Contact", "Payment"];
 
-const initialState: BookingState = {
+const defaultState: BookingState = {
   step: 1,
   conditionPhotos: [],
   agreedToTerms: false,
   fromHotel: "Sakura Hotel Shinjuku",
 };
 
-export default function BookPage() {
-  const [booking, setBooking]           = useState<BookingState>(initialState);
+function BookContent() {
+  const searchParams = useSearchParams();
+  const hotelParam   = searchParams.get("hotel");
+
+  const [booking, setBooking]               = useState<BookingState>(defaultState);
   const [confirmedOrder, setConfirmedOrder] = useState<{ id: string } | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
-  const directionRef = useRef<1 | -1>(1); // 1 = forward, -1 = backward
+  const directionRef = useRef<1 | -1>(1);
   const router = useRouter();
 
-  const update = (partial: Partial<BookingState>) =>
-    setBooking((prev) => ({ ...prev, ...partial }));
+  // Resolve hotel name from URL param
+  useEffect(() => {
+    if (!hotelParam) return;
+    fetch(`/api/hotels/${hotelParam}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((hotel) => {
+        if (!hotel) return;
+        const fullName = hotel.branchName ? `${hotel.name} ${hotel.branchName}` : hotel.name;
+        setBooking((prev) => ({ ...prev, fromHotel: fullName, fromHotelId: hotel.id }));
+      })
+      .catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelParam]);
+
+  const update = (partial: Partial<BookingState>) => setBooking((prev) => ({ ...prev, ...partial }));
 
   const next = () => {
     directionRef.current = 1;
@@ -166,5 +182,17 @@ export default function BookPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function BookPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#FEFCF8] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-[#1A120B]/20 border-t-[#1A120B] rounded-full animate-spin" />
+      </div>
+    }>
+      <BookContent />
+    </Suspense>
   );
 }

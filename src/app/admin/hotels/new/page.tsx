@@ -15,8 +15,14 @@ export default function NewHotelPage() {
     name: "", branchName: "", address: "",
     carrier: "yamato", cutoffTime: "17:00",
     printerType: "bluetooth_thermal", labelSize: "62mm", notes: "",
+    contactName: "", contactPhone: "", contactEmail: "",
+    collectionMethod: "fixed_time",
+    sameDayDelivery: false,
+    maxDailyItems: "",
+    storageLocation: "",
+    operationalNotes: "",
   });
-  const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
+  const set = (k: string, v: string | boolean) => setForm((p) => ({ ...p, [k]: v }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +30,10 @@ export default function NewHotelPage() {
     try {
       const res = await fetch("/api/hotels", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          maxDailyItems: form.maxDailyItems ? Number(form.maxDailyItems) : undefined,
+        }),
       });
       if (!res.ok) throw new Error();
       toast.success("Hotel registered successfully");
@@ -66,6 +75,12 @@ export default function NewHotelPage() {
             <Input label="Address"      required value={form.address}    onChange={(e) => set("address", e.target.value)}     placeholder="Full address" />
           </S>
 
+          <S title="Contact Person">
+            <Input label="Contact name"  value={form.contactName}  onChange={(e) => set("contactName", e.target.value)}  placeholder="e.g. Tanaka Hiroshi" />
+            <Input label="Contact phone" value={form.contactPhone} onChange={(e) => set("contactPhone", e.target.value)} placeholder="e.g. 03-1234-5678" />
+            <Input label="Contact email" type="email" value={form.contactEmail} onChange={(e) => set("contactEmail", e.target.value)} placeholder="e.g. ops@hotel.co.jp" />
+          </S>
+
           <S title="Delivery / Carrier">
             <div>
               <p className="text-sm font-medium text-[#44342A] mb-2">Carrier</p>
@@ -83,6 +98,46 @@ export default function NewHotelPage() {
             <Input label="Cutoff time" type="time" value={form.cutoffTime}
               onChange={(e) => set("cutoffTime", e.target.value)}
               hint="Last time to accept luggage for same-day pickup" />
+          </S>
+
+          <S title="Operations">
+            <div>
+              <p className="text-sm font-medium text-[#44342A] mb-2">Collection method</p>
+              <div className="flex flex-col gap-2">
+                {radioRow("fixed_time", "Fixed time (scheduled pickup)", form.collectionMethod, "collectionMethod")}
+                {radioRow("on_demand",  "On demand (call when ready)",    form.collectionMethod, "collectionMethod")}
+                {radioRow("drop_off",   "Drop-off (hotel brings to carrier)", form.collectionMethod, "collectionMethod")}
+              </div>
+            </div>
+            <label className={cn(
+              "flex items-center gap-3 p-3 rounded-2xl border-2 cursor-pointer transition-all",
+              form.sameDayDelivery ? "border-[#1A120B] bg-[#FEFCF8]" : "border-[#EDE8DF] hover:border-[#C8A96E]"
+            )}>
+              <input type="checkbox" checked={form.sameDayDelivery} onChange={(e) => set("sameDayDelivery", e.target.checked)} className="sr-only" />
+              <div className={cn(
+                "w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all",
+                form.sameDayDelivery ? "bg-[#1A120B] border-[#1A120B]" : "border-[#C8A96E]"
+              )}>
+                {form.sameDayDelivery && (
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+              <span className="text-sm text-[#44342A]">Same-day delivery supported</span>
+            </label>
+            <Input label="Max items per day" type="number" value={form.maxDailyItems}
+              onChange={(e) => set("maxDailyItems", e.target.value)} placeholder="e.g. 20" hint="Leave blank for no limit" />
+            <Input label="Storage location" value={form.storageLocation}
+              onChange={(e) => set("storageLocation", e.target.value)} placeholder="e.g. Front desk, Luggage room" />
+            <div>
+              <p className="text-sm font-medium text-[#44342A] mb-1.5">Operational notes <span className="text-[#A89080] font-normal text-xs">(internal)</span></p>
+              <textarea value={form.operationalNotes} onChange={(e) => set("operationalNotes", e.target.value)}
+                placeholder="Internal notes for BondEx staff only..."
+                rows={3}
+                className="w-full px-4 py-3 rounded-2xl border border-[#EDE8DF] bg-white text-sm text-[#1A120B] placeholder:text-[#A89080] focus:outline-none focus:ring-2 focus:ring-[#C8A96E]/30 focus:border-[#C8A96E] resize-none"
+              />
+            </div>
           </S>
 
           <S title="Printer / Label">

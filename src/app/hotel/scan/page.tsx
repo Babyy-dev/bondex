@@ -116,6 +116,22 @@ function ScanContent() {
     setStage("captured");
   };
 
+  const flagOrder = async () => {
+    if (!order) return;
+    try {
+      await fetch(`/api/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ flagged: true }),
+      });
+      toast.success("Order flagged — CS will follow up");
+      setStage("input");
+      setOrder(null);
+    } catch {
+      toast.error("Failed to flag order");
+    }
+  };
+
   const confirmCheckin = async () => {
     if (!order) return;
     setLoading(true);
@@ -212,7 +228,7 @@ function ScanContent() {
               </div>
 
               <p className="text-xs text-[#7A6252] bg-[#F8F3EC] border border-[#EDE8DF] rounded-2xl px-4 py-3">
-                Demo: Try order IDs <strong>ORD-001</strong> or <strong>ORD-002</strong>
+                Demo: Try order IDs <strong>ORD-DEMO1</strong> or <strong>ORD-DEMO2</strong>
               </p>
             </motion.div>
           )}
@@ -259,7 +275,7 @@ function ScanContent() {
                 <RefreshCw size={13} /> Scan different order
               </button>
 
-              <button className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl border border-red-200 bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors">
+              <button onClick={flagOrder} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl border border-red-200 bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors">
                 <Flag size={12} /> Flag an issue (no reason required)
               </button>
             </motion.div>

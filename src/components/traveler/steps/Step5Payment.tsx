@@ -68,7 +68,7 @@ function CheckoutForm({ orderId, price, onSuccess }: FormProps) {
       <div className="bg-white border border-[#EDE8DF] rounded-3xl p-5">
         <PaymentElement
           options={{
-            layout: "tabs",
+            layout: { type: "accordion", defaultCollapsed: false, radios: false, spacedAccordionItems: false },
             defaultValues: { billingDetails: { address: { country: "JP" } } },
           }}
         />
@@ -155,6 +155,7 @@ export function Step5Payment({ booking, onSuccess }: Props) {
           body: JSON.stringify({
             size: booking.size,
             fromHotel: booking.fromHotel,
+            fromHotelId: booking.fromHotelId,
             toAddress: booking.toAddress,
             deliveryDate: booking.deliveryDate,
             guestName: booking.toAddress?.recipientName ?? "Guest",
@@ -197,7 +198,7 @@ export function Step5Payment({ booking, onSuccess }: Props) {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-black text-[#1A120B] mb-1">Payment</h1>
-        <p className="text-sm text-[#A89080]">Secure payment via Stripe</p>
+        <p className="text-sm text-[#A89080]">Apple Pay · Google Pay · Card</p>
       </div>
 
       {/* Price summary */}

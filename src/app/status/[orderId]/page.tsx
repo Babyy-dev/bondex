@@ -30,11 +30,18 @@ function getStatusVariant(s: OrderStatus) {
 
 export default function StatusPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = use(params);
-  const [order, setOrder] = useState<Order | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [order,    setOrder]    = useState<Order | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [copied,   setCopied]   = useState(false);
 
   useEffect(() => {
-    fetch(`/api/orders/${orderId}`).then((r) => r.json()).then(setOrder).catch(console.error);
+    fetch(`/api/orders/${orderId}`)
+      .then((r) => {
+        if (!r.ok) { setNotFound(true); return null; }
+        return r.json();
+      })
+      .then((data) => { if (data) setOrder(data); })
+      .catch(() => setNotFound(true));
   }, [orderId]);
 
   const copyTracking = () => {
@@ -44,6 +51,15 @@ export default function StatusPage({ params }: { params: Promise<{ orderId: stri
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
+  if (notFound) return (
+    <div className="min-h-screen bg-[#FEFCF8] flex flex-col items-center justify-center gap-4 px-4">
+      <p className="text-4xl">📦</p>
+      <h1 className="text-xl font-black text-[#1A120B]">Order not found</h1>
+      <p className="text-sm text-[#A89080] text-center">Check your order ID or contact BondEx support.</p>
+      <Link href="/" className="text-sm text-[#C8A96E] underline">Back to home</Link>
+    </div>
+  );
 
   if (!order) return (
     <div className="min-h-screen bg-[#FEFCF8] flex items-center justify-center">

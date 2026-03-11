@@ -15,14 +15,19 @@ export default function AdminPaymentsPage() {
     fetch("/api/orders").then((r) => r.json()).then(setOrders).catch(console.error);
   }, []);
 
-  const failed = orders.filter((_, i) => i === 0).map((o) => ({
-    ...o, failReason: "Card declined", retryCount: 1,
-  }));
+  // Orders in CREATED status = payment was never completed (failed, abandoned, or pending CS follow-up)
+  const failed = orders
+    .filter((o) => o.status === "CREATED")
+    .map((o) => ({
+      ...o,
+      failReason: "Payment not completed",
+      retryCount: 0,
+    }));
 
   const handleRetry = async (id: string) => {
-    toast.loading("Retrying payment...", { id });
+    toast.loading("Notifying CS team...", { id });
     await new Promise((r) => setTimeout(r, 1200));
-    toast.success("Payment retry queued", { id });
+    toast.success("CS team notified — they will contact the guest", { id });
   };
 
   return (
@@ -32,8 +37,8 @@ export default function AdminPaymentsPage() {
           <Link href="/admin/dashboard" className="flex items-center gap-2 text-white/50 hover:text-white mb-4 text-sm">
             <ArrowLeft size={16} /> Dashboard
           </Link>
-          <h1 className="text-2xl font-black">Payment Failures</h1>
-          <p className="text-white/50 text-sm mt-1">Delivery is NOT stopped. CS handles these individually.</p>
+          <h1 className="text-2xl font-black">Unpaid Orders</h1>
+          <p className="text-white/50 text-sm mt-1">Payment not completed. CS handles these individually.</p>
         </div>
       </div>
 
@@ -62,7 +67,7 @@ export default function AdminPaymentsPage() {
                     <p className="font-bold text-[#1A120B]">{item.guestName}</p>
                     <p className="text-xs text-[#A89080]">{item.guestEmail}</p>
                   </div>
-                  <Badge variant="error">Payment failed</Badge>
+                  <Badge variant="error">Unpaid</Badge>
                 </div>
                 <div className="grid grid-cols-3 gap-3 text-sm mb-4">
                   <div><p className="text-xs text-[#A89080]">Amount</p><p className="font-semibold text-[#1A120B]">{formatCurrency(item.totalPrice)}</p></div>
@@ -71,7 +76,7 @@ export default function AdminPaymentsPage() {
                 </div>
                 <div className="flex gap-2">
                   <Button onClick={() => handleRetry(item.id)} size="sm">
-                    <RefreshCw size={13} className="mr-1.5" /> Retry payment
+                    <RefreshCw size={13} className="mr-1.5" /> Notify CS
                   </Button>
                   <Link href={`/admin/orders/${item.id}`}>
                     <Button variant="ghost" size="sm">View order</Button>
