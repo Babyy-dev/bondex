@@ -1,87 +1,104 @@
 "use client";
 import { useState, Suspense, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, Camera, CheckCircle2, Flag, RefreshCw } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { ArrowLeft, Camera, CheckCircle2, Flag, RefreshCw, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import type { Order } from "@/types";
 import toast from "react-hot-toast";
 
 function ScanContent() {
-  const searchParams   = useSearchParams();
-  const prefillId      = searchParams.get("orderId") ?? "";
+  const searchParams = useSearchParams();
+  const prefillId    = searchParams.get("orderId") ?? "";
 
-  const [inputId,   setInputId]   = useState(prefillId);
-  const [order,     setOrder]     = useState<Order | null>(null);
-  const [stage,     setStage]     = useState<"input"|"found"|"captured"|"done">("input");
-  const [loading,   setLoading]   = useState(false);
-  const [labelUrl,  setLabelUrl]  = useState<string | null>(null);
-  const [cameraOn,  setCameraOn]  = useState(false);
-  const [photoData, setPhotoData] = useState<string | null>(null);
+  const [inputId,  setInputId]  = useState(prefillId);
+  const [order,    setOrder]    = useState<Order | null>(null);
+  const [stage,    setStage]    = useState<"input" | "found" | "done">("input");
+  const [loading,  setLoading]  = useState(false);
+  const [labelUrl, setLabelUrl] = useState<string | null>(null);
 
-  const videoRef  = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  // Camera state
+  const [cameraOn,      setCameraOn]      = useState(false);
+  const [photoStage,    setPhotoStage]    = useState<"idle" | "previewing" | "processing">("idle");
 
-  // Start camera
+  const videoRef    = useRef<HTMLVideoElement>(null);
+  const streamRef   = useRef<MediaStream | null>(null);
+  const qrRafRef    = useRef<number>(0);
+
+  // ── Camera helpers ───────────────────────────────────────────────────────
+
+  const stopCamera = useCallback(() => {
+    cancelAnimationFrame(qrRafRef.current);
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setCameraOn(false);
+  }, []);
+
+  // Attach stream to video element once it is rendered
+  useEffect(() => {
+    if (cameraOn && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [cameraOn]);
+
+  // Clean up on unmount
+  useEffect(() => () => stopCamera(), [stopCamera]);
+
   const startCamera = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
       });
       streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      setCameraOn(true);
+      setCameraOn(true); // renders video element → useEffect attaches stream
     } catch {
-      toast.error("Camera permission denied");
+      toast.error("Camera permission denied. Please allow camera access.");
     }
   }, []);
 
-  const stopCamera = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    setCameraOn(false);
-  }, []);
+  // ── QR scanning loop (only in "input" stage) ─────────────────────────────
 
-  useEffect(() => () => { stopCamera(); }, [stopCamera]);
-
-  // QR scan via jsQR on animation frame
   useEffect(() => {
     if (!cameraOn || stage !== "input") return;
-    let raf: number;
+    let cancelled = false;
+
     const tick = async () => {
       const video = videoRef.current;
-      if (!video || video.readyState < 2) { raf = requestAnimationFrame(tick); return; }
+      if (!video || video.readyState < 2) {
+        if (!cancelled) qrRafRef.current = requestAnimationFrame(tick);
+        return;
+      }
       const canvas = document.createElement("canvas");
       canvas.width  = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext("2d");
-      if (!ctx) { raf = requestAnimationFrame(tick); return; }
+      if (!ctx) { if (!cancelled) qrRafRef.current = requestAnimationFrame(tick); return; }
       ctx.drawImage(video, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       try {
-        const jsQR = (await import("jsqr")).default;
+        const jsQR   = (await import("jsqr")).default;
         const result = jsQR(imageData.data, imageData.width, imageData.height);
         if (result?.data) {
           stopCamera();
-          // Parse BondEx QR payload
           let orderId = result.data;
-          try {
-            const parsed = JSON.parse(result.data);
-            if (parsed.orderId) orderId = parsed.orderId;
-          } catch { /* raw orderId string */ }
+          try { const p = JSON.parse(result.data); if (p.orderId) orderId = p.orderId; } catch { /* raw id */ }
           setInputId(orderId);
-          lookup(orderId);
+          lookupOrder(orderId);
           return;
         }
-      } catch { /* jsQR not ready yet */ }
-      raf = requestAnimationFrame(tick);
+      } catch { /* jsQR not ready */ }
+      if (!cancelled) qrRafRef.current = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [cameraOn, stage, stopCamera]);
 
-  const lookup = async (id = inputId) => {
+    qrRafRef.current = requestAnimationFrame(tick);
+    return () => { cancelled = true; cancelAnimationFrame(qrRafRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraOn, stage]);
+
+  // ── Order lookup ─────────────────────────────────────────────────────────
+
+  const lookupOrder = async (id = inputId) => {
     if (!id.trim()) return;
     setLoading(true);
     try {
@@ -89,6 +106,7 @@ function ScanContent() {
       if (!res.ok) throw new Error("Not found");
       const data: Order = await res.json();
       setOrder(data);
+      setPhotoStage("idle");
       setStage("found");
     } catch {
       toast.error("Order not found. Check the order ID.");
@@ -97,24 +115,60 @@ function ScanContent() {
     }
   };
 
-  // Capture photo via camera
-  const capturePhoto = async () => {
+  // ── Photo capture (canvas-based — works in all browsers) ─────────────────
+
+  const startPhotoCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
       });
-      const track  = stream.getVideoTracks()[0];
-      const capture = new (window as unknown as { ImageCapture: new (t: MediaStreamTrack) => { takePhoto: () => Promise<Blob> } }).ImageCapture(track);
-      const blob   = await capture.takePhoto();
-      const url    = URL.createObjectURL(blob);
-      setPhotoData(url);
-      stream.getTracks().forEach((t) => t.stop());
+      streamRef.current = stream;
+      setCameraOn(true);
+      setPhotoStage("previewing");
     } catch {
-      // Fallback if ImageCapture not supported
-      setPhotoData("demo-photo");
+      toast.error("Camera permission denied. Please allow camera access.");
     }
-    setStage("captured");
   };
+
+  // Capture frame from live video using canvas, then auto-confirm check-in
+  const captureAndCheckin = async () => {
+    if (!order) return;
+
+    // Capture frame from video as base64 JPEG
+    let photoData = "demo-photo";
+    const video   = videoRef.current;
+    if (video && video.readyState >= 2) {
+      const canvas  = document.createElement("canvas");
+      canvas.width  = video.videoWidth  || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx     = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(video, 0, 0);
+        photoData = canvas.toDataURL("image/jpeg", 0.8);
+      }
+    }
+
+    stopCamera();
+    setPhotoStage("processing");
+
+    // Auto-confirm check-in immediately — no confirm button (Decision OS)
+    try {
+      const res = await fetch("/api/shipco/checkin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id, photoUrls: [photoData] }),
+      });
+      if (!res.ok) throw new Error("Check-in failed");
+      const data = await res.json();
+      setLabelUrl(data.labelUrl);
+      setStage("done");
+    } catch {
+      toast.error("Check-in failed. Please try again.");
+      setPhotoStage("previewing");
+    }
+  };
+
+  // ── Flag order ────────────────────────────────────────────────────────────
 
   const flagOrder = async () => {
     if (!order) return;
@@ -132,39 +186,37 @@ function ScanContent() {
     }
   };
 
-  const confirmCheckin = async () => {
-    if (!order) return;
-    setLoading(true);
-    try {
-      const res = await fetch("/api/shipco/checkin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.id, photoUrls: [photoData ?? "/demo.jpg"] }),
-      });
-      if (!res.ok) throw new Error("Check-in failed");
-      const data = await res.json();
-      setLabelUrl(data.labelUrl);
-      setStage("done");
-    } catch {
-      toast.error("Check-in failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+  const resetToInput = () => {
+    stopCamera();
+    setStage("input");
+    setOrder(null);
+    setPhotoStage("idle");
+    setInputId("");
   };
 
   const inputCls = "w-full px-4 py-3 rounded-2xl border border-[#EDE8DF] bg-white text-sm text-[#1A120B] placeholder:text-[#A89080] focus:outline-none focus:ring-2 focus:ring-[#C8A96E]/30 focus:border-[#C8A96E]";
 
   return (
     <div className="min-h-screen bg-[#FEFCF8]">
+      {/* Header */}
       <div className="bg-[#1A120B] text-white px-4 pt-10 pb-6">
         <div className="max-w-lg mx-auto">
           <Link href="/hotel/orders" className="flex items-center gap-2 text-white/50 hover:text-white mb-4 text-sm">
             <ArrowLeft size={16} /> Back to list
           </Link>
           <h1 className="text-xl font-black">QR Scan & Check-in</h1>
-          <p className="text-white/50 text-sm">Scan order QR, then take luggage photo</p>
+          <p className="text-white/50 text-sm">Scan guest QR code, then take luggage photo</p>
         </div>
       </div>
+
+      {/* Video element — always in DOM so ref is always available */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="hidden"
+      />
 
       <div className="max-w-lg mx-auto px-4 py-6">
         <AnimatePresence mode="wait">
@@ -179,8 +231,16 @@ function ScanContent() {
               <div className="bg-[#1A120B] rounded-3xl overflow-hidden aspect-square relative flex items-center justify-center">
                 {cameraOn ? (
                   <>
-                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                    {/* Scan overlay */}
+                    {/* Show video feed in viewfinder when camera is on */}
+                    <video
+                      autoPlay playsInline muted
+                      ref={(el) => {
+                        // Secondary ref for inline display in viewfinder
+                        if (el && streamRef.current) el.srcObject = streamRef.current;
+                      }}
+                      className="w-full h-full object-cover"
+                    />
+                    {/* Corner overlay */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <div className="w-52 h-52 relative">
                         <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-[#C8A96E] rounded-tl-lg" />
@@ -209,7 +269,7 @@ function ScanContent() {
                       className="bg-[#C8A96E] text-[#1A120B] font-bold px-6 py-3 rounded-2xl text-sm hover:bg-[#B89558] transition-colors">
                       Start camera scan
                     </button>
-                    <p className="text-white/30 text-xs">Requires camera permission</p>
+                    <p className="text-white/30 text-xs">Point at guest QR code</p>
                   </div>
                 )}
               </div>
@@ -221,10 +281,14 @@ function ScanContent() {
               </div>
 
               <div className="flex gap-3">
-                <input value={inputId} onChange={(e) => setInputId(e.target.value)}
-                  placeholder="e.g. ORD-001" className={inputCls}
-                  onKeyDown={(e) => e.key === "Enter" && lookup()} />
-                <Button onClick={() => lookup()} loading={loading}>Lookup</Button>
+                <input
+                  value={inputId}
+                  onChange={(e) => setInputId(e.target.value)}
+                  placeholder="e.g. ORD-DEMO1"
+                  className={inputCls}
+                  onKeyDown={(e) => e.key === "Enter" && lookupOrder()}
+                />
+                <Button onClick={() => lookupOrder()} loading={loading}>Lookup</Button>
               </div>
 
               <p className="text-xs text-[#7A6252] bg-[#F8F3EC] border border-[#EDE8DF] rounded-2xl px-4 py-3">
@@ -239,6 +303,7 @@ function ScanContent() {
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
               className="flex flex-col gap-5"
             >
+              {/* Order details */}
               <div className="bg-white border-2 border-[#C8A96E] rounded-3xl p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <CheckCircle2 size={18} className="text-[#C8A96E]" />
@@ -247,66 +312,78 @@ function ScanContent() {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <Detail label="Guest"       value={order.guestName} />
                   <Detail label="Size"        value={`Size ${order.size}`} />
-                  <Detail label="Destination" value={order.toAddress.facilityName ?? order.toAddress.city} />
+                  <Detail label="Destination" value={order.toAddress?.facilityName ?? order.toAddress?.city ?? "—"} />
                   <Detail label="Delivery"    value={order.deliveryDate} />
                 </div>
               </div>
 
-              {/* Guest photo reference */}
-              <div className="bg-[#FEFCF8] border border-[#EDE8DF] rounded-3xl p-5 text-center">
-                <p className="text-xs text-[#A89080] mb-1">Guest reference photos</p>
-                <p className="text-sm text-[#A89080] italic">No photos provided</p>
+              {/* Guest reference photos */}
+              <div className="bg-[#FEFCF8] border border-[#EDE8DF] rounded-3xl p-4">
+                <p className="text-xs font-semibold text-[#A89080] uppercase tracking-wide mb-2">Guest reference photos</p>
+                {order.photoUrls && order.photoUrls.length > 0 ? (
+                  <div className="flex gap-2 flex-wrap">
+                    {order.photoUrls.map((url, i) => (
+                      <img key={i} src={url} alt={`Guest photo ${i + 1}`} className="w-20 h-20 object-cover rounded-xl border border-[#EDE8DF]" />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-[#A89080] italic">No photos provided</p>
+                )}
               </div>
 
               {/* Photo capture area */}
-              <div className="bg-white border-2 border-dashed border-[#EDE8DF] rounded-3xl p-8 text-center flex flex-col items-center gap-3">
-                <Camera size={32} className="text-[#C8A96E]" />
-                <p className="text-sm font-semibold text-[#1A120B]">Take luggage photo</p>
-                <p className="text-xs text-[#A89080]">
-                  This officially records the luggage. Check-in completes automatically once photo is taken.
-                </p>
-                <Button onClick={capturePhoto} className="mt-2">
-                  <Camera size={16} className="mr-2" /> Capture photo
-                </Button>
+              <div className="bg-white border-2 border-dashed border-[#EDE8DF] rounded-3xl overflow-hidden">
+                {photoStage === "idle" && (
+                  <div className="p-8 flex flex-col items-center gap-3 text-center">
+                    <Camera size={32} className="text-[#C8A96E]" />
+                    <p className="text-sm font-semibold text-[#1A120B]">Take luggage photo</p>
+                    <p className="text-xs text-[#A89080]">
+                      Photo automatically records the luggage and completes check-in.
+                    </p>
+                    <Button onClick={startPhotoCamera} className="mt-2">
+                      <Camera size={16} className="mr-2" /> Open camera
+                    </Button>
+                  </div>
+                )}
+
+                {photoStage === "previewing" && (
+                  <div className="relative">
+                    {/* Live preview for luggage photo */}
+                    <video
+                      autoPlay playsInline muted
+                      ref={(el) => {
+                        if (el && streamRef.current) el.srcObject = streamRef.current;
+                      }}
+                      className="w-full aspect-video object-cover"
+                    />
+                    <div className="p-4 flex flex-col gap-3">
+                      <p className="text-xs text-center text-[#7A6252]">
+                        Point at the luggage and tap capture — check-in completes instantly
+                      </p>
+                      <Button onClick={captureAndCheckin} size="lg" className="w-full">
+                        <Camera size={16} className="mr-2" /> Capture photo
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {photoStage === "processing" && (
+                  <div className="p-10 flex flex-col items-center gap-4">
+                    <Loader2 size={32} className="text-[#C8A96E] animate-spin" />
+                    <p className="text-sm font-semibold text-[#1A120B]">Recording luggage…</p>
+                    <p className="text-xs text-[#A89080]">Generating shipping label</p>
+                  </div>
+                )}
               </div>
 
-              <button onClick={() => { setStage("input"); setOrder(null); }}
+              <button onClick={resetToInput}
                 className="flex items-center justify-center gap-2 text-sm text-[#A89080] hover:text-[#7A6252]">
                 <RefreshCw size={13} /> Scan different order
               </button>
 
-              <button onClick={flagOrder} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl border border-red-200 bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors">
+              <button onClick={flagOrder}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl border border-red-200 bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors">
                 <Flag size={12} /> Flag an issue (no reason required)
-              </button>
-            </motion.div>
-          )}
-
-          {/* ── Stage: Captured ── */}
-          {stage === "captured" && order && (
-            <motion.div key="captured"
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-              className="flex flex-col gap-5"
-            >
-              <div className="bg-[#FEFCF8] border border-[#EDE8DF] rounded-3xl p-5 text-center">
-                <p className="text-lg mb-1">📸</p>
-                <p className="font-bold text-[#1A120B]">Photo captured</p>
-                <p className="text-sm text-[#7A6252] mt-1">Confirm to complete check-in and print label</p>
-              </div>
-
-              {photoData && photoData !== "demo-photo" ? (
-                <img src={photoData} alt="Luggage" className="w-full rounded-3xl object-cover aspect-video" />
-              ) : (
-                <div className="bg-[#EDE8DF] rounded-3xl aspect-video flex items-center justify-center">
-                  <p className="text-[#7A6252] text-sm">📦 Luggage photo captured</p>
-                </div>
-              )}
-
-              <Button onClick={confirmCheckin} loading={loading} size="lg" className="w-full">
-                Confirm & print label
-              </Button>
-              <button onClick={() => setStage("found")}
-                className="text-sm text-[#A89080] text-center hover:text-[#7A6252]">
-                Retake photo
               </button>
             </motion.div>
           )}
@@ -333,7 +410,7 @@ function ScanContent() {
               <div className="bg-[#FEFCF8] border border-[#EDE8DF] rounded-3xl px-6 py-5 w-full text-left">
                 <p className="text-sm font-bold text-[#1A120B] mb-2">Self-Labeling instructions</p>
                 <p className="text-sm text-[#7A6252]">
-                  Give the sticker to the guest and have them apply it themselves.
+                  Tear off the sticker and hand it to the guest. Guest applies it to their luggage themselves.
                 </p>
               </div>
 
@@ -349,6 +426,7 @@ function ScanContent() {
               </Link>
             </motion.div>
           )}
+
         </AnimatePresence>
       </div>
     </div>
