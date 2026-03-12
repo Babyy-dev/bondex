@@ -15,7 +15,15 @@ export default function AdminHotelsPage() {
     fetch("/api/hotels").then((r) => r.json()).then(setHotels).catch(console.error);
   }, []);
 
-  const filtered = hotels.filter((h) => !query || h.name.toLowerCase().includes(query.toLowerCase()));
+  const filtered = hotels.filter((h) => {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return (
+      h.name.toLowerCase().includes(q) ||
+      (h.branchName ?? "").toLowerCase().includes(q) ||
+      h.address.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="min-h-screen bg-[#FEFCF8]">
@@ -38,7 +46,7 @@ export default function AdminHotelsPage() {
       <div className="max-w-3xl mx-auto px-6 py-5 flex flex-col gap-4">
         <div className="relative max-w-sm">
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#A89080]" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search hotels..."
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, branch, or area..."
             className="w-full pl-10 pr-4 py-3 rounded-2xl border border-[#EDE8DF] bg-white text-sm placeholder:text-[#A89080] focus:outline-none focus:ring-2 focus:ring-[#C8A96E]/30 focus:border-[#C8A96E]"
           />
         </div>
@@ -59,7 +67,10 @@ export default function AdminHotelsPage() {
               </div>
               <div className="grid grid-cols-3 gap-3 text-xs text-[#7A6252]">
                 <div><p className="text-[#A89080]">Carrier</p><p className="font-medium capitalize">{hotel.carrier}</p></div>
-                <div><p className="text-[#A89080]">Cutoff</p><p className="font-medium">{hotel.cutoffTime}</p></div>
+                <div>
+                  <p className="text-[#A89080]">Hours</p>
+                  <p className="font-medium">{hotel.receiptStartTime ? `${hotel.receiptStartTime} – ${hotel.cutoffTime}` : `Until ${hotel.cutoffTime}`}</p>
+                </div>
                 <div><p className="text-[#A89080]">Today's orders</p><p className="font-medium">{hotel.dailyOrderCount}</p></div>
               </div>
               <div className="mt-3 pt-3 border-t border-[#F0E8DB] flex items-center gap-2 text-xs text-[#A89080]">

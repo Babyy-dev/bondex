@@ -5,7 +5,7 @@ import { ArrowRight, Shield, Clock, Globe } from "lucide-react";
 
 const TRUST_ITEMS = [
   { icon: Shield, title: "Japan's delivery infrastructure, built in", desc: "Powered by Yamato Transport & Sagawa Express" },
-  { icon: Clock,  title: "36-hour adventure",                         desc: "Book today, delivered tomorrow" },
+  { icon: Clock,  title: "Reliable by design",                        desc: "Rigid logistics — no judgement, no delays" },
   { icon: Globe,  title: "Anywhere in Japan",                         desc: "Hotels, airports, stations, depots" },
 ];
 

@@ -51,6 +51,7 @@ export interface Order {
   qrCode?: string;
   createdAt: string;
   updatedAt: string;
+  checkedInAt?: string;
   destinationType: DestinationType;
   paymentIntentId?: string;
   labelUrl?: string;
@@ -78,6 +79,7 @@ export interface Hotel {
   maxDailyItems?: number;
   storageLocation?: string;
   operationalNotes?: string;
+  receiptStartTime?: string;
 }
 
 export interface BookingState {

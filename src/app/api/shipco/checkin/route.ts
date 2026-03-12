@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
 
     const updated = await updateOrder(orderId, {
       status: "CHECKED_IN",
+      checkedInAt: new Date().toISOString(),
       photoUrls: [...(order.photoUrls ?? []), ...(photoUrls ?? [])],
       labelUrl,
       trackingNumber,

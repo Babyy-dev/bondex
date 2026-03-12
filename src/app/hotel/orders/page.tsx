@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { Search, QrCode, RefreshCw, LogOut } from "lucide-react";
+import { Search, QrCode, RefreshCw, LogOut, ChevronDown, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { Order } from "@/types";
+import type { Order, Hotel } from "@/types";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 
@@ -29,15 +29,28 @@ const FILTERS: { key: Filter; en: string; ja: string }[] = [
   { key: "flagged",   en: "Flagged",    ja: "フラグ"   },
 ];
 
+const LEGEND = [
+  { color: "bg-yellow-400", icon: "⏳", en: "Waiting for guest",  ja: "ゲスト待ち"  },
+  { color: "bg-green-500",  icon: "✅", en: "Ready for pickup",   ja: "引取待ち"    },
+  { color: "bg-red-500",    icon: "🚩", en: "Flagged",            ja: "フラグあり"  },
+];
+
+function todayJST() {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" }); // "YYYY-MM-DD"
+}
+
 export default function HotelOrdersPage() {
-  const [orders,    setOrders]    = useState<Order[]>([]);
-  const [filter,    setFilter]    = useState<Filter>("all");
-  const [query,     setQuery]     = useState("");
-  const [loading,   setLoading]   = useState(true);
-  const [lang,      setLang]      = useState<"EN"|"JA">("EN");
-  const [hotelId,   setHotelId]   = useState<string>("");
-  const [hotelName, setHotelName] = useState<string>("Hotel");
+  const [orders,      setOrders]      = useState<Order[]>([]);
+  const [filter,      setFilter]      = useState<Filter>("all");
+  const [query,       setQuery]       = useState("");
+  const [loading,     setLoading]     = useState(true);
+  const [lang,        setLang]        = useState<"EN"|"JA">("EN");
+  const [hotelId,     setHotelId]     = useState<string>("");
+  const [hotelName,   setHotelName]   = useState<string>("Hotel");
+  const [branchName,  setBranchName]  = useState<string>("");
+  const [legendOpen,  setLegendOpen]  = useState(false);
   const router = useRouter();
+  const today = todayJST();
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -61,6 +74,11 @@ export default function HotelOrdersPage() {
         setHotelId(session.hotelId);
         setHotelName(session.hotelName ?? "Hotel");
         load(session.hotelId);
+        // Fetch full hotel record to get branchName
+        fetch(`/api/hotels/${session.hotelId}`)
+          .then((r) => r.json())
+          .then((hotel: Hotel) => { if (hotel.branchName) setBranchName(hotel.branchName); })
+          .catch(() => {/* non-fatal */});
       })
       .catch(console.error);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -82,8 +100,10 @@ export default function HotelOrdersPage() {
       <div className="bg-[#1A120B] text-white px-4 pt-10 pb-5">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-black">{hotelName}</h1>
-            <p className="text-white/50 text-sm">Today's Pickup List</p>
+            <h1 className="text-lg font-black">{hotelName}{branchName ? ` — ${branchName}` : ""}</h1>
+            <p className="text-white/50 text-sm">
+              {lang === "EN" ? "Today's Pickup List" : "本日のお預かりリスト"}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <div className="flex bg-white/10 rounded-xl overflow-hidden text-xs">
@@ -105,6 +125,39 @@ export default function HotelOrdersPage() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-4 flex flex-col gap-4">
+
+        {/* Status Guide (collapsible legend) */}
+        <div className="bg-white rounded-2xl border border-[#EDE8DF] overflow-hidden">
+          <button
+            onClick={() => setLegendOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-[#7A6252] hover:bg-[#FEFCF8] transition-colors"
+          >
+            <span>{lang === "EN" ? "Status Guide" : "ステータスガイド"}</span>
+            <ChevronDown size={15} className={cn("transition-transform duration-200", legendOpen && "rotate-180")} />
+          </button>
+          <AnimatePresence>
+            {legendOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="px-4 pb-4 flex flex-col gap-2">
+                  {LEGEND.map((item) => (
+                    <div key={item.en} className="flex items-center gap-3 text-sm text-[#1A120B]">
+                      <span className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", item.color)} />
+                      <span className="text-base leading-none">{item.icon}</span>
+                      <span>{lang === "EN" ? item.en : item.ja}</span>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
         {/* Search */}
         <div className="relative">
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#A89080]" />
@@ -136,28 +189,45 @@ export default function HotelOrdersPage() {
             <div className="w-8 h-8 border-4 border-[#1A120B]/20 border-t-[#1A120B] rounded-full animate-spin" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-12 text-[#A89080] text-sm">No orders found</div>
+          <div className="text-center py-12 text-[#A89080] text-sm">
+            {lang === "EN" ? "No orders found" : "注文が見つかりません"}
+          </div>
         ) : (
           <div className="flex flex-col gap-3">
             {filtered.map((order, i) => {
               const s = statusInfo(order.status, order.flagged);
+              const isToday = order.deliveryDate === today;
               return (
                 <motion.div key={order.id}
                   initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                 >
                   <Link href={`/hotel/orders/${order.id}`}>
-                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-[#EDE8DF] hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
+                    <div className={cn(
+                      "bg-white rounded-3xl p-5 shadow-sm border transition-all duration-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5",
+                      isToday ? "border-[#C8A96E]" : "border-[#EDE8DF]"
+                    )}>
                       <div className="flex items-start justify-between mb-3">
                         <div>
                           <p className="text-xs font-mono text-[#A89080]">{order.id}</p>
-                          <p className="font-bold text-[#1A120B]">{order.guestName}</p>
+                          <p className={cn("text-[#1A120B]", isToday ? "font-black" : "font-bold")}>
+                            {order.guestName}
+                          </p>
                         </div>
-                        <Badge variant={s.variant}>{s.icon} {s.label}</Badge>
+                        <div className="flex flex-col items-end gap-1.5">
+                          <Badge variant={s.variant}>{s.icon} {s.label}</Badge>
+                          {isToday && (
+                            <span className="text-[10px] font-bold text-[#C8A96E] bg-[#FDF6E8] border border-[#C8A96E]/30 rounded-full px-2 py-0.5">
+                              {lang === "EN" ? "TODAY" : "本日"}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-4 text-xs text-[#A89080]">
                         <span>Size {order.size}</span>
                         <span>→ {order.toAddress.facilityName ?? order.toAddress.city}</span>
-                        <span className="ml-auto font-medium text-[#7A6252]">{order.deliveryDate}</span>
+                        <span className={cn("ml-auto font-medium", isToday ? "text-[#C8A96E] font-bold" : "text-[#7A6252]")}>
+                          {order.deliveryDate}
+                        </span>
                       </div>
                     </div>
                   </Link>
@@ -166,6 +236,13 @@ export default function HotelOrdersPage() {
             })}
           </div>
         )}
+
+        {/* Exception handling link */}
+        <Link href="/hotel/exception"
+          className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-[#EDE8DF] bg-white text-sm text-[#7A6252] hover:border-[#C8A96E] hover:text-[#1A120B] transition-colors">
+          <AlertTriangle size={14} />
+          {lang === "EN" ? "QR damaged / Exception handling" : "QR破損・例外対応"}
+        </Link>
       </div>
 
       {/* FAB */}

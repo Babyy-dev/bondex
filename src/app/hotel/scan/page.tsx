@@ -21,6 +21,7 @@ function ScanContent() {
   // Camera state
   const [cameraOn,      setCameraOn]      = useState(false);
   const [photoStage,    setPhotoStage]    = useState<"idle" | "previewing" | "processing">("idle");
+  const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
 
   const videoRef    = useRef<HTMLVideoElement>(null);
   const streamRef   = useRef<MediaStream | null>(null);
@@ -115,6 +116,8 @@ function ScanContent() {
     }
   };
 
+  const MAX_PHOTOS = 3;
+
   // ── Photo capture (canvas-based — works in all browsers) ─────────────────
 
   const startPhotoCamera = async () => {
@@ -130,8 +133,8 @@ function ScanContent() {
     }
   };
 
-  // Capture frame from live video using canvas, then auto-confirm check-in
-  const captureAndCheckin = async () => {
+  // Capture a photo frame and add to capturedPhotos; auto-confirm on first capture (Decision OS)
+  const capturePhoto = async () => {
     if (!order) return;
 
     // Capture frame from video as base64 JPEG
@@ -148,25 +151,39 @@ function ScanContent() {
       }
     }
 
-    stopCamera();
-    setPhotoStage("processing");
+    const newPhotos = [...capturedPhotos, photoData];
+    setCapturedPhotos(newPhotos);
 
-    // Auto-confirm check-in immediately — no confirm button (Decision OS)
-    try {
-      const res = await fetch("/api/shipco/checkin", {
-        method: "POST",
+    // If this is the first photo, auto-confirm check-in (Decision OS: photo = confirmation)
+    if (newPhotos.length === 1) {
+      stopCamera();
+      setPhotoStage("processing");
+      try {
+        const res = await fetch("/api/shipco/checkin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: order.id, photoUrls: newPhotos }),
+        });
+        if (!res.ok) throw new Error("Check-in failed");
+        const data = await res.json();
+        setLabelUrl(data.labelUrl);
+        setStage("done");
+      } catch {
+        toast.error("Check-in failed. Please try again.");
+        setCapturedPhotos([]);
+        setPhotoStage("previewing");
+      }
+    } else {
+      // Additional photos (2nd, 3rd) — update order photos silently, stop camera if max reached
+      if (newPhotos.length >= MAX_PHOTOS) stopCamera();
+      fetch(`/api/orders/${order.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.id, photoUrls: [photoData] }),
-      });
-      if (!res.ok) throw new Error("Check-in failed");
-      const data = await res.json();
-      setLabelUrl(data.labelUrl);
-      setStage("done");
-    } catch {
-      toast.error("Check-in failed. Please try again.");
-      setPhotoStage("previewing");
+        body: JSON.stringify({ photoUrls: newPhotos }),
+      }).catch(() => {/* non-fatal */});
     }
   };
+
 
   // ── Flag order ────────────────────────────────────────────────────────────
 
@@ -192,6 +209,7 @@ function ScanContent() {
     setOrder(null);
     setPhotoStage("idle");
     setInputId("");
+    setCapturedPhotos([]);
   };
 
   const inputCls = "w-full px-4 py-3 rounded-2xl border border-[#EDE8DF] bg-white text-sm text-[#1A120B] placeholder:text-[#A89080] focus:outline-none focus:ring-2 focus:ring-[#C8A96E]/30 focus:border-[#C8A96E]";
@@ -338,7 +356,7 @@ function ScanContent() {
                     <Camera size={32} className="text-[#C8A96E]" />
                     <p className="text-sm font-semibold text-[#1A120B]">Take luggage photo</p>
                     <p className="text-xs text-[#A89080]">
-                      Photo automatically records the luggage and completes check-in.
+                      1st photo auto-confirms check-in. Up to {MAX_PHOTOS} photos allowed.
                     </p>
                     <Button onClick={startPhotoCamera} className="mt-2">
                       <Camera size={16} className="mr-2" /> Open camera
@@ -356,12 +374,27 @@ function ScanContent() {
                       }}
                       className="w-full aspect-video object-cover"
                     />
+                    {/* Captured photo thumbnails */}
+                    {capturedPhotos.length > 0 && (
+                      <div className="absolute top-3 left-3 flex gap-1.5">
+                        {capturedPhotos.map((src, i) => (
+                          <img key={i} src={src} alt={`Photo ${i + 1}`}
+                            className="w-12 h-12 object-cover rounded-lg border-2 border-white shadow" />
+                        ))}
+                        <div className="w-12 h-12 rounded-lg border-2 border-dashed border-white/60 flex items-center justify-center text-white/60 text-xs">
+                          {capturedPhotos.length}/{MAX_PHOTOS}
+                        </div>
+                      </div>
+                    )}
                     <div className="p-4 flex flex-col gap-3">
                       <p className="text-xs text-center text-[#7A6252]">
-                        Point at the luggage and tap capture — check-in completes instantly
+                        {capturedPhotos.length === 0
+                          ? "Point at the luggage and tap capture — check-in completes instantly"
+                          : `Photo ${capturedPhotos.length + 1} of ${MAX_PHOTOS} (optional)`}
                       </p>
-                      <Button onClick={captureAndCheckin} size="lg" className="w-full">
-                        <Camera size={16} className="mr-2" /> Capture photo
+                      <Button onClick={capturePhoto} size="lg" className="w-full">
+                        <Camera size={16} className="mr-2" />
+                        {capturedPhotos.length === 0 ? "Capture photo" : `Add photo ${capturedPhotos.length + 1}`}
                       </Button>
                     </div>
                   </div>

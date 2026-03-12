@@ -59,11 +59,14 @@ export default function AdminDashboard() {
   };
   useEffect(() => { load(); }, []);
 
-  const revenue  = orders.filter((o) => o.status === "DELIVERED").reduce((s, o) => s + o.totalPrice, 0);
-  const earnings = Math.round(revenue * 0.15);
-  const flagged  = orders.filter((o) => o.flagged).length;
-  const paid     = orders.filter((o) => o.status === "PAID").length;
-  const checkedIn= orders.filter((o) => o.status === "CHECKED_IN").length;
+  const revenue       = orders.filter((o) => o.status === "DELIVERED").reduce((s, o) => s + o.totalPrice, 0);
+  const earnings      = Math.round(revenue * 0.15);
+  const flagged       = orders.filter((o) => o.flagged).length;
+  const paid          = orders.filter((o) => o.status === "PAID").length;
+  const checkedIn     = orders.filter((o) => o.status === "CHECKED_IN").length;
+  const carrierRefused= orders.filter((o) => o.status === "CARRIER_REFUSED").length;
+  // QR stock: warn when active hotels exceed 2 (threshold-based alert; replace with real inventory when available)
+  const qrStockLow    = activeHotels > 0 && activeHotels >= 2;
 
   return (
     <div className="min-h-screen bg-[#FEFCF8] flex">
@@ -101,14 +104,50 @@ export default function AdminDashboard() {
           </div>
 
           {/* Alerts */}
-          {(flagged > 0 || paid > 2) && (
-            <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 mb-5 flex items-start gap-3">
-              <AlertTriangle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-bold text-amber-800">Action required</p>
-                {flagged > 0 && <p className="text-xs text-amber-700 mt-1">🚩 {flagged} flagged order(s) need attention</p>}
-                {paid > 2   && <p className="text-xs text-amber-700 mt-0.5">⏳ {paid} order(s) still waiting for check-in</p>}
-              </div>
+          {(flagged > 0 || paid > 2 || carrierRefused > 0 || qrStockLow) && (
+            <div className="flex flex-col gap-2 mb-5">
+              {flagged > 0 && (
+                <Link href="/admin/orders?filter=flagged">
+                  <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3 hover:bg-red-100 transition-colors cursor-pointer">
+                    <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-red-800">🚩 {flagged} flagged order{flagged > 1 ? "s" : ""} need CS attention</p>
+                      <p className="text-xs text-red-600 mt-0.5">Customer support must review these</p>
+                    </div>
+                    <span className="text-xs text-red-500">View →</span>
+                  </div>
+                </Link>
+              )}
+              {carrierRefused > 0 && (
+                <Link href="/admin/orders?filter=CARRIER_REFUSED">
+                  <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 flex items-center gap-3 hover:bg-orange-100 transition-colors cursor-pointer">
+                    <AlertTriangle size={16} className="text-orange-500 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-orange-800">⚠️ {carrierRefused} carrier refusal{carrierRefused > 1 ? "s" : ""}</p>
+                      <p className="text-xs text-orange-600 mt-0.5">Carrier could not accept — contact guest</p>
+                    </div>
+                    <span className="text-xs text-orange-500">View →</span>
+                  </div>
+                </Link>
+              )}
+              {paid > 2 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3">
+                  <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-amber-800">⏳ {paid} order{paid > 1 ? "s" : ""} waiting for hotel check-in</p>
+                    <p className="text-xs text-amber-600 mt-0.5">May be auto-cancelled if deadline passes</p>
+                  </div>
+                </div>
+              )}
+              {qrStockLow && (
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center gap-3">
+                  <AlertTriangle size={16} className="text-blue-500 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-blue-800">🏷️ QR tag stock may be running low</p>
+                    <p className="text-xs text-blue-600 mt-0.5">Check physical QR tag inventory at partner hotels</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

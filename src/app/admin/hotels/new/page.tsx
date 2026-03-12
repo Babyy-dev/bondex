@@ -13,7 +13,7 @@ export default function NewHotelPage() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: "", branchName: "", address: "",
-    carrier: "yamato", cutoffTime: "17:00",
+    carrier: "yamato", cutoffTime: "17:00", receiptStartTime: "10:00",
     printerType: "bluetooth_thermal", labelSize: "62mm", notes: "",
     contactName: "", contactPhone: "", contactEmail: "",
     collectionMethod: "fixed_time",
@@ -33,6 +33,7 @@ export default function NewHotelPage() {
         body: JSON.stringify({
           ...form,
           maxDailyItems: form.maxDailyItems ? Number(form.maxDailyItems) : undefined,
+          receiptStartTime: form.receiptStartTime || undefined,
         }),
       });
       if (!res.ok) throw new Error();
@@ -95,6 +96,9 @@ export default function NewHotelPage() {
                 ))}
               </div>
             </div>
+            <Input label="Receipt start time" type="time" value={form.receiptStartTime}
+              onChange={(e) => set("receiptStartTime", e.target.value)}
+              hint="When the hotel starts accepting luggage (e.g. 10:00)" />
             <Input label="Cutoff time" type="time" value={form.cutoffTime}
               onChange={(e) => set("cutoffTime", e.target.value)}
               hint="Last time to accept luggage for same-day pickup" />
