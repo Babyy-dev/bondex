@@ -29,8 +29,32 @@ function BookContent() {
   const [booking, setBooking]               = useState<BookingState>(defaultState);
   const [confirmedOrder, setConfirmedOrder] = useState<{ id: string } | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [redirectError,   setRedirectError]   = useState<string | null>(null);
   const directionRef = useRef<1 | -1>(1);
   const router = useRouter();
+
+  // Handle Stripe 3DS redirect return (?payment_intent=...&redirect_status=...)
+  useEffect(() => {
+    const paymentIntentId  = searchParams.get("payment_intent");
+    const redirectStatus   = searchParams.get("redirect_status");
+    const orderId          = searchParams.get("order_id");
+    if (!paymentIntentId || !redirectStatus) return;
+
+    if (redirectStatus === "succeeded" && orderId) {
+      fetch("/api/stripe/verify-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentIntentId, orderId }),
+      })
+        .then((r) => r.ok ? setConfirmedOrder({ id: orderId }) : r.json().then((d) => setRedirectError(d.error ?? "Payment verification failed")))
+        .catch(() => setRedirectError("Payment verification failed"));
+    } else if (redirectStatus === "failed") {
+      setRedirectError("Your payment was declined. Please try again.");
+    } else if (redirectStatus === "processing") {
+      setRedirectError("Your payment is processing — you'll receive a confirmation email shortly.");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Resolve hotel name from URL param
   useEffect(() => {
@@ -64,6 +88,20 @@ function BookContent() {
   };
 
   if (confirmedOrder) return <Step6Confirmed orderId={confirmedOrder.id} booking={booking} />;
+
+  if (redirectError) return (
+    <div className="min-h-screen bg-[#FEFCF8] flex items-center justify-center px-4">
+      <div className="max-w-sm w-full bg-white border border-[#EDE8DF] rounded-3xl p-8 flex flex-col items-center gap-4 text-center">
+        <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center text-2xl">❌</div>
+        <h2 className="text-lg font-black text-[#1A120B]">Payment issue</h2>
+        <p className="text-sm text-[#7A6252]">{redirectError}</p>
+        <button onClick={() => router.push("/")}
+          className="w-full py-3 bg-[#1A120B] text-white font-semibold rounded-2xl hover:bg-[#2D1A0E] transition-colors">
+          Back to home
+        </button>
+      </div>
+    </div>
+  );
 
   const slideVariants = {
     enter: (dir: number) => ({ opacity: 0, x: dir > 0 ? 40 : -40 }),
