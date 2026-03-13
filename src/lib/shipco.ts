@@ -56,6 +56,8 @@ async function shipcoFetch(path: string, options: RequestInit = {}) {
       Authorization: `Bearer ${SHIPCO_API_KEY}`,
       "Content-Type": "application/json",
       Accept: "application/json",
+      "User-Agent": "BondEx/1.0 (shipment-integration)",
+      "X-Requested-With": "XMLHttpRequest",
       ...(options.headers ?? {}),
     },
   });
