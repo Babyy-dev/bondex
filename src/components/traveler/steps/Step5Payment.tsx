@@ -4,20 +4,26 @@ import { loadStripe } from "@stripe/stripe-js";
 import {
   Elements,
   ExpressCheckoutElement,
-  CardElement,
+  PaymentElement,
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
-import { Lock } from "lucide-react";
+import { Lock, Hotel, CalendarDays, Package, Mail } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { getSizeInfo } from "@/lib/pricing";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import type { BookingState } from "@/types";
 import toast from "react-hot-toast";
+
+const DEST_ICON: Record<string, string> = {
+  airport: "✈️", hotel: "🏨", station: "🚉", depot: "📦", other: "📍",
+};
 
 const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
   : null;
+
+const isTestMode = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.startsWith("pk_test_") ?? false;
 
 // ── Stripe checkout form ─────────────────────────────────────────────────────
 
@@ -64,8 +70,6 @@ function StripeCheckoutForm({ orderId, price, onSuccess }: FormProps) {
     if (!stripe || !elements) return;
     setCardLoading(true);
     try {
-      const cardElement = elements.getElement(CardElement);
-      if (!cardElement) throw new Error("Card element not found");
       const { error } = await stripe.confirmPayment({
         elements,
         confirmParams: { return_url: `${window.location.origin}/book` },
@@ -82,6 +86,17 @@ function StripeCheckoutForm({ orderId, price, onSuccess }: FormProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Test mode hint */}
+      {isTestMode && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex flex-col gap-0.5">
+          <p className="text-xs font-semibold text-amber-800">Test mode — no real charge</p>
+          <p className="text-xs text-amber-700">
+            Use card <span className="font-mono font-bold">4242 4242 4242 4242</span>
+            {" "}· any future MM/YY · any CVC
+          </p>
+        </div>
+      )}
+
       {/* Express checkout — Apple Pay / Google Pay */}
       <div>
         <ExpressCheckoutElement
@@ -105,23 +120,15 @@ function StripeCheckoutForm({ orderId, price, onSuccess }: FormProps) {
         <div className="flex-1 h-px bg-[#EDE8DF]" />
       </div>
 
-      {/* Card form — always visible, non-collapsible */}
+      {/* Card form */}
       <form onSubmit={handleCardSubmit} className="flex flex-col gap-4">
         <div className="bg-white border border-[#EDE8DF] rounded-3xl p-5">
           <p className="text-sm font-semibold text-[#44342A] mb-4">Credit / Debit Card</p>
-          <div className="p-3 rounded-2xl border border-[#EDE8DF] bg-[#FEFCF8]">
-            <CardElement
+          <div className="p-1">
+            <PaymentElement
               options={{
-                style: {
-                  base: {
-                    fontSize: "15px",
-                    color: "#1A120B",
-                    fontFamily: "system-ui, sans-serif",
-                    "::placeholder": { color: "#A89080" },
-                  },
-                  invalid: { color: "#dc2626" },
-                },
-                hidePostalCode: true,
+                layout: { type: "accordion", defaultCollapsed: false, radios: false, spacedAccordionItems: false },
+                fields: { billingDetails: { address: { postalCode: "never" } } },
               }}
             />
           </div>
@@ -138,6 +145,9 @@ function StripeCheckoutForm({ orderId, price, onSuccess }: FormProps) {
 
 function DemoPayForm({ orderId, price, onSuccess }: FormProps) {
   const [loading, setLoading] = useState(false);
+  const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
+  const [expiry,     setExpiry]     = useState("12/26");
+  const [cvc,        setCvc]        = useState("123");
 
   const handlePay = async () => {
     setLoading(true);
@@ -160,10 +170,26 @@ function DemoPayForm({ orderId, price, onSuccess }: FormProps) {
     "w-full px-4 py-3 rounded-2xl border border-[#EDE8DF] bg-white text-sm text-[#1A120B] " +
     "placeholder:text-[#A89080] focus:outline-none focus:ring-2 focus:ring-[#C8A96E]/30 focus:border-[#C8A96E]";
 
+  const formatCardNumber = (v: string) => {
+    const digits = v.replace(/\D/g, "").slice(0, 16);
+    return digits.replace(/(.{4})/g, "$1 ").trim();
+  };
+
+  const formatExpiry = (v: string) => {
+    const digits = v.replace(/\D/g, "").slice(0, 4);
+    return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+  };
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs text-amber-700">
-        Demo mode — Stripe key not configured. Click any Pay button to simulate payment.
+      {/* Demo banner with test card hint */}
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex flex-col gap-1">
+        <p className="text-xs font-semibold text-amber-800">Demo mode — no real charge</p>
+        <p className="text-xs text-amber-700">
+          Test card pre-filled: <span className="font-mono font-bold">4242 4242 4242 4242</span>
+          {" "}· Any future date · Any 3-digit CVC
+        </p>
+        <p className="text-xs text-amber-600 mt-0.5">Click <strong>Pay</strong> below to simulate a successful payment.</p>
       </div>
 
       {/* Mock Apple Pay button */}
@@ -194,13 +220,40 @@ function DemoPayForm({ orderId, price, onSuccess }: FormProps) {
         <div className="flex-1 h-px bg-[#EDE8DF]" />
       </div>
 
-      {/* Always-visible card form */}
+      {/* Interactive card form with pre-filled test data */}
       <div className="bg-white border border-[#EDE8DF] rounded-3xl p-5 flex flex-col gap-4">
-        <p className="text-sm font-semibold text-[#44342A]">Credit / Debit Card</p>
-        <input type="text" placeholder="1234 5678 9012 3456" className={inputCls} readOnly />
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-[#44342A]">Credit / Debit Card</p>
+          <span className="text-[10px] bg-amber-100 text-amber-700 font-semibold px-2 py-0.5 rounded-full">Test card</span>
+        </div>
+        <input
+          type="text"
+          inputMode="numeric"
+          placeholder="4242 4242 4242 4242"
+          className={inputCls}
+          value={cardNumber}
+          onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
+          maxLength={19}
+        />
         <div className="grid grid-cols-2 gap-3">
-          <input type="text" placeholder="MM/YY" className={inputCls} readOnly />
-          <input type="text" placeholder="CVC" className={inputCls} readOnly />
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="MM/YY"
+            className={inputCls}
+            value={expiry}
+            onChange={(e) => setExpiry(formatExpiry(e.target.value))}
+            maxLength={5}
+          />
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="CVC"
+            className={inputCls}
+            value={cvc}
+            onChange={(e) => setCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            maxLength={4}
+          />
         </div>
         <Button onClick={handlePay} loading={loading} size="lg" className="w-full">
           Pay {formatCurrency(price)}
@@ -266,11 +319,89 @@ export function Step5Payment({ booking, onSuccess }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const addr = booking.toAddress;
+  const destIcon = DEST_ICON[booking.destinationType ?? "other"];
+  const destName = addr?.facilityName || [addr?.street, addr?.city, addr?.prefecture].filter(Boolean).join(", ") || "—";
+
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-black text-[#1A120B] mb-1">Payment</h1>
-        <p className="text-sm text-[#A89080]">Apple Pay · Google Pay · Card</p>
+        <h1 className="text-2xl font-black text-[#1A120B] mb-1">Review &amp; Pay</h1>
+        <p className="text-sm text-[#A89080]">Confirm your booking details before payment</p>
+      </div>
+
+      {/* Booking summary */}
+      <div className="bg-white border border-[#EDE8DF] rounded-3xl overflow-hidden">
+        <div className="px-5 pt-4 pb-2">
+          <p className="text-xs font-semibold text-[#A89080] uppercase tracking-wide">Booking summary</p>
+        </div>
+
+        {/* Pickup */}
+        <div className="flex items-start gap-3 px-5 py-3 border-t border-[#F8F3EC]">
+          <div className="w-8 h-8 rounded-xl bg-[#F8F3EC] flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Hotel size={15} className="text-[#7A6252]" />
+          </div>
+          <div>
+            <p className="text-xs text-[#A89080] mb-0.5">Pickup</p>
+            <p className="text-sm font-semibold text-[#1A120B]">{booking.fromHotel}</p>
+          </div>
+        </div>
+
+        {/* Destination */}
+        <div className="flex items-start gap-3 px-5 py-3 border-t border-[#F8F3EC]">
+          <div className="w-8 h-8 rounded-xl bg-[#F8F3EC] flex items-center justify-center flex-shrink-0 mt-0.5 text-base">
+            {destIcon}
+          </div>
+          <div>
+            <p className="text-xs text-[#A89080] mb-0.5">Deliver to</p>
+            <p className="text-sm font-semibold text-[#1A120B]">{destName}</p>
+            {addr?.postalCode && (
+              <p className="text-xs text-[#A89080] mt-0.5">
+                〒{addr.postalCode} {addr.prefecture} {addr.city}{addr.street ? ` ${addr.street}` : ""}{addr.building ? ` ${addr.building}` : ""}
+              </p>
+            )}
+            {addr?.recipientName && (
+              <p className="text-xs text-[#7A6252] mt-0.5">Recipient: {addr.recipientName}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Date */}
+        <div className="flex items-start gap-3 px-5 py-3 border-t border-[#F8F3EC]">
+          <div className="w-8 h-8 rounded-xl bg-[#F8F3EC] flex items-center justify-center flex-shrink-0 mt-0.5">
+            <CalendarDays size={15} className="text-[#7A6252]" />
+          </div>
+          <div>
+            <p className="text-xs text-[#A89080] mb-0.5">Delivery date</p>
+            <p className="text-sm font-semibold text-[#1A120B]">
+              {booking.deliveryDate ? formatDate(booking.deliveryDate) : "—"}
+            </p>
+          </div>
+        </div>
+
+        {/* Luggage */}
+        <div className="flex items-start gap-3 px-5 py-3 border-t border-[#F8F3EC]">
+          <div className="w-8 h-8 rounded-xl bg-[#F8F3EC] flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Package size={15} className="text-[#7A6252]" />
+          </div>
+          <div>
+            <p className="text-xs text-[#A89080] mb-0.5">Luggage</p>
+            <p className="text-sm font-semibold text-[#1A120B]">Size {booking.size} – {sizeInfo.label}</p>
+            <p className="text-xs text-[#A89080]">{sizeInfo.description}</p>
+          </div>
+        </div>
+
+        {/* Contact */}
+        <div className="flex items-start gap-3 px-5 py-3 border-t border-[#F8F3EC]">
+          <div className="w-8 h-8 rounded-xl bg-[#F8F3EC] flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Mail size={15} className="text-[#7A6252]" />
+          </div>
+          <div>
+            <p className="text-xs text-[#A89080] mb-0.5">Confirmation sent to</p>
+            <p className="text-sm font-semibold text-[#1A120B]">{booking.guestEmail ?? "—"}</p>
+            {booking.guestPhone && <p className="text-xs text-[#A89080] mt-0.5">{booking.guestPhone}</p>}
+          </div>
+        </div>
       </div>
 
       {/* Price summary */}
