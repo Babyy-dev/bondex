@@ -225,9 +225,6 @@ export default function HotelExceptionPage() {
                 <Button onClick={handleSearch} loading={loading}>{t.search}</Button>
               </div>
 
-              <p className="text-xs text-[#7A6252] bg-[#F8F3EC] border border-[#EDE8DF] rounded-2xl px-4 py-3">
-                Demo: Try <strong>ORD-DEMO1</strong> or guest name <strong>Alex</strong>
-              </p>
 
               {/* Results */}
               {results.length === 0 && query && !loading && (

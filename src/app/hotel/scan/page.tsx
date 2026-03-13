@@ -138,7 +138,7 @@ function ScanContent() {
     if (!order) return;
 
     // Capture frame from video as base64 JPEG
-    let photoData = "demo-photo";
+    let photoData = "";
     const video   = videoRef.current;
     if (video && video.readyState >= 2) {
       const canvas  = document.createElement("canvas");
@@ -302,16 +302,13 @@ function ScanContent() {
                 <input
                   value={inputId}
                   onChange={(e) => setInputId(e.target.value)}
-                  placeholder="e.g. ORD-DEMO1"
+                  placeholder="e.g. ORD-XXXXXXXX"
                   className={inputCls}
                   onKeyDown={(e) => e.key === "Enter" && lookupOrder()}
                 />
                 <Button onClick={() => lookupOrder()} loading={loading}>Lookup</Button>
               </div>
 
-              <p className="text-xs text-[#7A6252] bg-[#F8F3EC] border border-[#EDE8DF] rounded-2xl px-4 py-3">
-                Demo: Try order IDs <strong>ORD-DEMO1</strong> or <strong>ORD-DEMO2</strong>
-              </p>
             </motion.div>
           )}
 

@@ -72,11 +72,8 @@ export async function POST(req: NextRequest) {
       trackingNumber = shipmentResult.tracking_number;
       carrier = shipmentResult.carrier ?? "Yamato Transport";
     } catch (shipcoErr) {
-      console.error("Ship&Co error (non-fatal for demo):", shipcoErr);
-      // In demo mode – generate a mock label
-      labelUrl = `/api/labels/mock/${orderId}`;
-      trackingNumber = `DEMO-${Date.now()}`;
-      carrier = "Yamato Transport";
+      console.error("Ship&Co error:", shipcoErr);
+      return NextResponse.json({ error: "Failed to create shipment with Ship&Co. Please check your API key and try again." }, { status: 502 });
     }
 
     const updated = await updateOrder(orderId, {

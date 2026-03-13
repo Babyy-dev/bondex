@@ -180,95 +180,7 @@ function StripeCheckoutForm({ orderId, price, onSuccess }: FormProps) {
   );
 }
 
-// ── Demo mode form (no Stripe key configured) ─────────────────────────────────
 
-function DemoPayForm({ orderId, price, onSuccess }: FormProps) {
-  const [loading,    setLoading]    = useState(false);
-  const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
-  const [expiry,     setExpiry]     = useState("12/26");
-  const [cvc,        setCvc]        = useState("123");
-
-  const handlePay = async () => {
-    setLoading(true);
-    try {
-      await fetch(`/api/orders/${orderId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "PAID" }),
-      });
-      toast.success("Demo payment confirmed!");
-      onSuccess(orderId);
-    } catch {
-      toast.error("Payment failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const inputCls =
-    "w-full px-4 py-3 rounded-2xl border border-[#EDE8DF] bg-white text-sm text-[#1A120B] " +
-    "placeholder:text-[#A89080] focus:outline-none focus:ring-2 focus:ring-[#C8A96E]/30 focus:border-[#C8A96E]";
-
-  const fmtCard   = (v: string) => v.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim();
-  const fmtExpiry = (v: string) => { const d = v.replace(/\D/g, "").slice(0, 4); return d.length > 2 ? `${d.slice(0,2)}/${d.slice(2)}` : d; };
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex flex-col gap-1">
-        <p className="text-xs font-semibold text-amber-800">Demo mode — no Stripe key configured</p>
-        <p className="text-xs text-amber-700">
-          Test card pre-filled: <span className="font-mono font-bold">4242 4242 4242 4242</span>
-          {" "}· Any future date · Any CVC
-        </p>
-        <p className="text-xs text-amber-600">Click <strong>Pay</strong> to simulate a successful payment.</p>
-      </div>
-
-      {/* Mock wallet buttons */}
-      <button onClick={handlePay} disabled={loading}
-        className="w-full h-12 bg-black text-white font-semibold rounded-2xl flex items-center justify-center gap-2 hover:bg-zinc-800 active:scale-[0.98] transition-all">
-        <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.7 9.05 7.42c1.4.07 2.38.74 3.19.8.93-.17 1.88-.86 3.13-.93 1.46-.08 2.87.52 3.65 1.62-3.31 2-2.78 6.65.67 7.9-.73 1.57-1.67 3.25-2.64 4.47zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
-        Buy with Apple Pay
-      </button>
-      <button onClick={handlePay} disabled={loading}
-        className="w-full h-12 bg-white border-2 border-[#EDE8DF] text-[#1A120B] font-semibold rounded-2xl flex items-center justify-center gap-2 hover:bg-[#FAFAFA] active:scale-[0.98] transition-all">
-        <svg viewBox="0 0 24 24" className="w-5 h-5">
-          <path d="M21.98 12.21c0-.63-.06-1.24-.17-1.82H12v3.44h5.6c-.24 1.3-.97 2.41-2.06 3.14v2.61h3.33c1.94-1.79 3.11-4.42 3.11-7.37z" fill="#4285F4"/>
-          <path d="M12 22c2.8 0 5.15-.93 6.87-2.52l-3.33-2.61c-.93.62-2.12.99-3.54.99-2.72 0-5.02-1.84-5.84-4.31H2.72v2.69C4.44 19.54 7.98 22 12 22z" fill="#34A853"/>
-          <path d="M6.16 13.55A5.97 5.97 0 0 1 5.85 12c0-.54.09-1.07.31-1.55V7.76H2.72A10.01 10.01 0 0 0 2 12c0 1.62.39 3.15 1.07 4.5l3.09-2.95z" fill="#FBBC05"/>
-          <path d="M12 6.14c1.53 0 2.91.53 3.99 1.57l2.98-2.98C17.14 3.03 14.79 2 12 2 7.98 2 4.44 4.46 2.72 7.76l3.44 2.69C6.98 7.98 9.28 6.14 12 6.14z" fill="#EA4335"/>
-        </svg>
-        Buy with Google Pay
-      </button>
-
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-px bg-[#EDE8DF]" />
-        <span className="text-xs text-[#A89080] font-medium">or pay with card</span>
-        <div className="flex-1 h-px bg-[#EDE8DF]" />
-      </div>
-
-      <div className="bg-white border border-[#EDE8DF] rounded-3xl p-5 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-[#44342A]">Credit / Debit Card</p>
-          <span className="text-[10px] bg-amber-100 text-amber-700 font-semibold px-2 py-0.5 rounded-full">Demo</span>
-        </div>
-        <input type="text" inputMode="numeric" placeholder="4242 4242 4242 4242"
-          className={inputCls} value={cardNumber} maxLength={19}
-          onChange={(e) => setCardNumber(fmtCard(e.target.value))} />
-        <div className="grid grid-cols-2 gap-3">
-          <input type="text" inputMode="numeric" placeholder="MM/YY"
-            className={inputCls} value={expiry} maxLength={5}
-            onChange={(e) => setExpiry(fmtExpiry(e.target.value))} />
-          <input type="text" inputMode="numeric" placeholder="CVC"
-            className={inputCls} value={cvc} maxLength={4}
-            onChange={(e) => setCvc(e.target.value.replace(/\D/g, "").slice(0, 4))} />
-        </div>
-        <Button onClick={handlePay} loading={loading} size="lg" className="w-full">
-          Pay {formatCurrency(price)}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 // ── Outer component ───────────────────────────────────────────────────────────
 
@@ -462,9 +374,11 @@ export function Step5Payment({ booking, onSuccess }: Props) {
         </Elements>
       )}
 
-      {/* Demo mode — no Stripe key */}
       {orderId && !stripePromise && (
-        <DemoPayForm orderId={orderId} price={sizeInfo.price} onSuccess={onSuccess} />
+        <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+          <p className="text-sm font-semibold text-red-800">Payment unavailable</p>
+          <p className="text-xs text-red-700 mt-1">Stripe is not configured. Please contact support.</p>
+        </div>
       )}
 
       <div className="flex items-center justify-center gap-1.5 text-xs text-[#A89080]">

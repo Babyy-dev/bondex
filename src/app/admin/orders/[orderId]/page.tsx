@@ -333,17 +333,11 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ ord
           <div className="bg-white rounded-3xl p-5 shadow-sm border border-[#EDE8DF]">
             <p className="text-xs font-semibold text-[#A89080] uppercase tracking-wide mb-3">Evidence Photos</p>
             <div className="flex gap-3 flex-wrap">
-              {order.photoUrls.map((url, i) => (
-                url !== "demo-photo" ? (
-                  <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                    <img src={url} alt={`Evidence ${i + 1}`}
-                      className="w-24 h-24 rounded-2xl object-cover border border-[#EDE8DF] hover:opacity-80 transition-opacity" />
-                  </a>
-                ) : (
-                  <div key={i} className="w-24 h-24 rounded-2xl bg-[#F8F3EC] border border-[#EDE8DF] flex items-center justify-center">
-                    <span className="text-2xl">📦</span>
-                  </div>
-                )
+              {order.photoUrls.filter(url => url && url !== "").map((url, i) => (
+                <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                  <img src={url} alt={`Evidence ${i + 1}`}
+                    className="w-24 h-24 rounded-2xl object-cover border border-[#EDE8DF] hover:opacity-80 transition-opacity" />
+                </a>
               ))}
             </div>
             <p className="text-xs text-[#A89080] mt-2">Taken by hotel staff at check-in · Retained 7 days post-delivery</p>

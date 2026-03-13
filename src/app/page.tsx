@@ -120,8 +120,6 @@ export default function LandingPage() {
           <Link href="/hotel/login"    className="text-xs text-[#C8A96E] hover:text-[#1A120B] transition-colors underline">Hotel Staff Portal →</Link>
           <span className="text-[#EDE8DF] text-xs">|</span>
           <Link href="/admin/login"    className="text-xs text-[#C8A96E] hover:text-[#1A120B] transition-colors underline">Admin Dashboard →</Link>
-          <span className="text-[#EDE8DF] text-xs">|</span>
-          <Link href="/status/ORD-DEMO1" className="text-xs text-[#C8A96E] hover:text-[#1A120B] transition-colors underline">Demo Status →</Link>
         </motion.div>
       </div>
     </div>
