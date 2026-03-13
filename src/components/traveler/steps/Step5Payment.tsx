@@ -106,7 +106,7 @@ function StripeCheckoutForm({ orderId, price, onSuccess }: FormProps) {
           }}
           options={{
             buttonType: { applePay: "buy", googlePay: "buy" },
-            layout: { maxColumns: 1, maxRows: 2, overflow: "never" },
+            layout: { maxColumns: 1, maxRows: 2, overflow: "auto" },
           }}
         />
       </div>
@@ -128,7 +128,6 @@ function StripeCheckoutForm({ orderId, price, onSuccess }: FormProps) {
             <PaymentElement
               options={{
                 layout: { type: "accordion", defaultCollapsed: false, radios: false, spacedAccordionItems: false },
-                fields: { billingDetails: { address: { postalCode: "never" } } },
               }}
             />
           </div>
