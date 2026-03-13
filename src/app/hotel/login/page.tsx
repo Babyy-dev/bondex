@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/Button";
 import toast from "react-hot-toast";
 
 export default function HotelLogin() {
-  const [facilityId, setFacilityId] = useState("HTL-001");
-  const [password,   setPassword]   = useState("demo123");
+  const [facilityId, setFacilityId] = useState("");
+  const [password,   setPassword]   = useState("");
   const [loading,    setLoading]    = useState(false);
   const [lang,       setLang]       = useState<"EN" | "JA">("EN");
   const router = useRouter();
@@ -88,9 +88,6 @@ export default function HotelLogin() {
             </Button>
           </form>
 
-          <p className="text-center text-xs text-[#A89080] mt-4">
-            Demo: Facility ID = HTL-001 · Password = demo123
-          </p>
         </div>
       </motion.div>
     </div>

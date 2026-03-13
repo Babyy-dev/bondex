@@ -65,6 +65,11 @@ export interface Hotel {
   name: string;
   branchName?: string;
   address: string;
+  // Structured address for Ship&Co pickup label
+  addressLine1?: string;
+  city?: string;
+  prefecture?: string;
+  postalCode?: string;
   status: "active" | "paused";
   dailyOrderCount: number;
   carrier: "yamato" | "sagawa";

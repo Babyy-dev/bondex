@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { env } from "@/lib/env";
 import { updateOrder, getOrder } from "@/lib/db";
-import { sendDelivered } from "@/lib/email";
+import { sendDelivered, sendPaymentFailed } from "@/lib/email";
 import Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -40,6 +40,12 @@ export async function POST(req: NextRequest) {
       const orderId = pi.metadata?.orderId;
       if (orderId) {
         console.warn(`Payment failed for order ${orderId} – CS to handle`);
+        const order = await getOrder(orderId);
+        if (order) {
+          sendPaymentFailed(order).catch((err) =>
+            console.error(`Payment failed email error for ${orderId}:`, err)
+          );
+        }
       }
       break;
     }

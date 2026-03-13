@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrder, updateOrder } from "@/lib/db";
+import { getOrder, getHotel, updateOrder } from "@/lib/db";
 import { createShipment } from "@/lib/shipco";
 import { sendCheckinComplete } from "@/lib/email";
 
@@ -12,22 +12,33 @@ export async function POST(req: NextRequest) {
     if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
     if (order.status !== "PAID") {
+      const statusMsg: Record<string, string> = {
+        CREATED:          "Payment not yet received for this order",
+        CHECKED_IN:       "This order has already been checked in",
+        HANDED_TO_CARRIER:"This order has already been handed to the carrier",
+        IN_TRANSIT:       "This order is already in transit",
+        DELIVERED:        "This order has already been delivered",
+        AUTO_CANCELLED:   "This order was automatically cancelled",
+        CARRIER_REFUSED:  "This order was refused by the carrier",
+      };
       return NextResponse.json(
-        { error: `Cannot check in order with status ${order.status}` },
+        { error: statusMsg[order.status] ?? `Cannot check in order with status ${order.status}` },
         { status: 400 }
       );
     }
 
-    // Create Ship&Co shipment and get label
+    // Fetch hotel to get real pickup address
+    const hotel = order.fromHotelId ? await getHotel(order.fromHotelId) : null;
+
     const fromAddress = {
       full_name: "BondEx Staff",
-      company: order.fromHotel,
-      address1: "1-2-3 Kabukicho",
-      city: "Shinjuku",
-      state: "Tokyo",
-      zip: "160-0021",
-      country: "JP",
-      phone: "0312345678",
+      company:   hotel ? [hotel.name, hotel.branchName].filter(Boolean).join(" ") : order.fromHotel,
+      address1:  hotel?.addressLine1 ?? hotel?.address ?? "1-2-3 Kabukicho",
+      city:      hotel?.city       ?? "Shinjuku",
+      state:     hotel?.prefecture ?? "Tokyo",
+      zip:       hotel?.postalCode ?? "160-0021",
+      country:   "JP",
+      phone:     hotel?.contactPhone ?? "0312345678",
     };
 
     const toAddress = {

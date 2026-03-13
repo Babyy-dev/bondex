@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/Button";
 import toast from "react-hot-toast";
 
 export default function AdminLogin() {
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("admin123");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loading,  setLoading]  = useState(false);
   const router = useRouter();
 
@@ -66,9 +66,6 @@ export default function AdminLogin() {
             </Button>
           </form>
 
-          <p className="text-center text-xs text-[#A89080] mt-4">
-            Demo: username = admin · password = admin123
-          </p>
         </div>
       </motion.div>
     </div>

@@ -12,7 +12,8 @@ export default function NewHotelPage() {
   const router  = useRouter();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    name: "", branchName: "", address: "",
+    name: "", branchName: "",
+    addressLine1: "", city: "", prefecture: "", postalCode: "",
     carrier: "yamato", cutoffTime: "17:00", receiptStartTime: "10:00",
     printerType: "bluetooth_thermal", labelSize: "62mm", notes: "",
     contactName: "", contactPhone: "", contactEmail: "",
@@ -32,6 +33,8 @@ export default function NewHotelPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          // Build display address string from structured fields
+          address: [form.addressLine1, form.city, form.prefecture, form.postalCode].filter(Boolean).join(", "),
           maxDailyItems: form.maxDailyItems ? Number(form.maxDailyItems) : undefined,
           receiptStartTime: form.receiptStartTime || undefined,
         }),
@@ -71,9 +74,14 @@ export default function NewHotelPage() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
 
           <S title="Basic Information">
-            <Input label="Hotel name"   required value={form.name}       onChange={(e) => set("name", e.target.value)}       placeholder="e.g. Sakura Hotel" />
-            <Input label="Branch name"          value={form.branchName}  onChange={(e) => set("branchName", e.target.value)}  placeholder="e.g. Shinjuku" />
-            <Input label="Address"      required value={form.address}    onChange={(e) => set("address", e.target.value)}     placeholder="Full address" />
+            <Input label="Hotel name"    required value={form.name}         onChange={(e) => set("name", e.target.value)}         placeholder="e.g. Sakura Hotel" />
+            <Input label="Branch name"           value={form.branchName}    onChange={(e) => set("branchName", e.target.value)}    placeholder="e.g. Shinjuku" />
+            <Input label="Street address" required value={form.addressLine1} onChange={(e) => set("addressLine1", e.target.value)} placeholder="e.g. 1-2-3 Kabukicho" />
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="City"       required value={form.city}       onChange={(e) => set("city", e.target.value)}       placeholder="e.g. Shinjuku" />
+              <Input label="Prefecture" required value={form.prefecture} onChange={(e) => set("prefecture", e.target.value)} placeholder="e.g. Tokyo" />
+            </div>
+            <Input label="Postal code" required value={form.postalCode} onChange={(e) => set("postalCode", e.target.value)} placeholder="e.g. 160-0021" />
           </S>
 
           <S title="Contact Person">
