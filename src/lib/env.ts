@@ -39,6 +39,7 @@ export const env = {
   // Ship&Co (optional — falls back to mock label if missing)
   SHIPCO_API_KEY:      optionalEnv("SHIPCO_API_KEY"),
   SHIPCO_API_BASE_URL: optionalEnv("SHIPCO_API_BASE_URL", "https://app.shipandco.com/api/v1"),
+  PROXY_SECRET:        optionalEnv("PROXY_SECRET"),
 
   // SMTP (optional — emails logged to console if missing)
   SMTP_HOST: optionalEnv("SMTP_HOST"),

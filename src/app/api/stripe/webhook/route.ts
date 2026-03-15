@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { env } from "@/lib/env";
 import { updateOrder, getOrder } from "@/lib/db";
-import { sendDelivered, sendPaymentFailed } from "@/lib/email";
+import { sendPaymentFailed } from "@/lib/email";
 import Stripe from "stripe";
 
 export const runtime = "nodejs";

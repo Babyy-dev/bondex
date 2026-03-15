@@ -164,12 +164,15 @@ function ScanContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ orderId: order.id, photoUrls: newPhotos }),
         });
-        if (!res.ok) throw new Error("Check-in failed");
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error ?? "Check-in failed");
+        }
         const data = await res.json();
         setLabelUrl(data.labelUrl);
         setStage("done");
-      } catch {
-        toast.error("Check-in failed. Please try again.");
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "Check-in failed. Please try again.");
         setCapturedPhotos([]);
         setPhotoStage("previewing");
       }

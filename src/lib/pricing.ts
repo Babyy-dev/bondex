@@ -49,14 +49,19 @@ export function calculatePrice(size: LuggageSize): { base: number; max: number }
 }
 
 export function getEarliestDeliveryDate(): Date {
-  const now = new Date();
-  const cutoff = new Date(now);
-  cutoff.setHours(17, 0, 0, 0);
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const dayAfter = new Date(now);
-  dayAfter.setDate(dayAfter.getDate() + 2);
-  return now < cutoff ? tomorrow : dayAfter;
+  // Evaluate the 17:00 cutoff against JST (UTC+9), not server local time
+  const nowJst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const jstHour = nowJst.getUTCHours(); // UTC hours of the JST-shifted timestamp = JST hour
+  const pastCutoff = jstHour >= 17;
+
+  // Return midnight UTC of the target JST calendar date so toISOString() and
+  // getDate()/getMonth()/getFullYear() (on UTC server) both show the correct date
+  const daysToAdd = pastCutoff ? 2 : 1;
+  return new Date(Date.UTC(
+    nowJst.getUTCFullYear(),
+    nowJst.getUTCMonth(),
+    nowJst.getUTCDate() + daysToAdd,
+  ));
 }
 
 export function getDeliveryDates(): Date[] {

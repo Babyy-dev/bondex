@@ -39,6 +39,7 @@ export interface CreateShipmentParams {
   orderId: string;
   guestName: string;
   checkInDate: string;
+  carrier?: string; // Ship&Co carrier code, e.g. "yamato_business" or "sagawa_yu_pack"
 }
 
 export interface ShipcoShipment {
@@ -50,14 +51,17 @@ export interface ShipcoShipment {
 }
 
 async function shipcoFetch(path: string, options: RequestInit = {}) {
+  const isProxy = !!env.PROXY_SECRET;
+
   const res = await fetch(`${SHIPCO_API_BASE}${path}`, {
     ...options,
     headers: {
-      Authorization: `Bearer ${SHIPCO_API_KEY}`,
+      ...(isProxy
+        ? { "x-proxy-secret": env.PROXY_SECRET }
+        : { Authorization: `Bearer ${SHIPCO_API_KEY}` }),
       "Content-Type": "application/json",
       Accept: "application/json",
       "User-Agent": "BondEx/1.0 (shipment-integration)",
-      "X-Requested-With": "XMLHttpRequest",
       ...(options.headers ?? {}),
     },
   });
@@ -79,6 +83,7 @@ export async function createShipment(params: CreateShipmentParams): Promise<Ship
         date: params.deliveryDate,
         type: "delivery",
         currency: "JPY",
+        ...(params.carrier ? { carrier: params.carrier } : {}),
       },
       from_address: params.fromAddress,
       to_address: {
