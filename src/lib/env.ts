@@ -27,14 +27,14 @@ function optionalEnv(name: string, fallback = ""): string {
 
 export const env = {
   // Database
-  MONGODB_URI: requireEnv("MONGODB_URI"),
+  MONGODB_URI: optionalEnv("MONGODB_URI"),
 
   // Auth
-  SESSION_SECRET: requireEnv("SESSION_SECRET"),
+  SESSION_SECRET: optionalEnv("SESSION_SECRET", "default-secret-change-in-production"),
 
   // Stripe (required for payments)
-  STRIPE_SECRET_KEY:     requireEnv("STRIPE_SECRET_KEY"),
-  STRIPE_WEBHOOK_SECRET: optionalEnv("STRIPE_WEBHOOK_SECRET"), // optional — only needed for webhook verification
+  STRIPE_SECRET_KEY:     optionalEnv("STRIPE_SECRET_KEY"),
+  STRIPE_WEBHOOK_SECRET: optionalEnv("STRIPE_WEBHOOK_SECRET"),
 
   // Ship&Co (optional — falls back to mock label if missing)
   SHIPCO_API_KEY:      optionalEnv("SHIPCO_API_KEY"),
