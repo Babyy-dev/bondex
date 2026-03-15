@@ -6,13 +6,14 @@ import { SIZES } from "@/lib/pricing";
 import { SizeCard } from "@/components/traveler/SizeCard";
 import { SizeModal } from "@/components/traveler/SizeModal";
 import { Button } from "@/components/ui/Button";
-import type { BookingState, SizeInfo } from "@/types";
+import type { BookingState, Hotel, SizeInfo } from "@/types";
 import { cn } from "@/lib/utils";
 
 interface Props {
   booking: BookingState;
   update: (p: Partial<BookingState>) => void;
   onNext: () => void;
+  hotels?: Hotel[];
 }
 
 const PROHIBITED = [
@@ -22,11 +23,12 @@ const PROHIBITED = [
   { emoji: "🚫", label: "Restricted items" },
 ];
 
-export function Step1Luggage({ booking, update, onNext }: Props) {
+export function Step1Luggage({ booking, update, onNext, hotels = [] }: Props) {
   const [modalSize, setModalSize]       = useState<SizeInfo | null>(null);
   const [showProhibited, setShowProhibited] = useState(false);
 
-  const canContinue = !!booking.size && booking.agreedToTerms;
+  const needsHotel = hotels.length > 0 && !booking.fromHotelId;
+  const canContinue = !!booking.size && booking.agreedToTerms && !needsHotel;
 
   return (
     <div className="flex flex-col gap-6">
@@ -34,6 +36,38 @@ export function Step1Luggage({ booking, update, onNext }: Props) {
         <h1 className="text-2xl font-black text-[#1A120B] mb-1">Select luggage size</h1>
         <p className="text-sm text-[#A89080]">Handled by Japan's nationwide delivery network</p>
       </div>
+
+      {/* Hotel selector — shown only when not pre-selected via URL */}
+      {hotels.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-semibold text-[#44342A]">
+            Pickup hotel <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={booking.fromHotelId ?? ""}
+            onChange={(e) => {
+              const hotel = hotels.find((h) => h.id === e.target.value);
+              if (!hotel) { update({ fromHotelId: undefined, fromHotel: "" }); return; }
+              const fullName = hotel.branchName ? `${hotel.name} ${hotel.branchName}` : hotel.name;
+              update({ fromHotelId: hotel.id, fromHotel: fullName });
+            }}
+            className={cn(
+              "w-full px-4 py-3 rounded-2xl border bg-white text-sm text-[#1A120B] focus:outline-none focus:ring-2 focus:ring-[#C8A96E]/30 focus:border-[#C8A96E]",
+              !booking.fromHotelId ? "border-red-200 bg-red-50" : "border-[#EDE8DF]"
+            )}
+          >
+            <option value="">— Select your hotel —</option>
+            {hotels.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.branchName ? `${h.name} ${h.branchName}` : h.name}
+              </option>
+            ))}
+          </select>
+          {!booking.fromHotelId && (
+            <p className="text-xs text-red-500">Please select your hotel to continue</p>
+          )}
+        </div>
+      )}
 
       {/* Size grid */}
       <div className="grid grid-cols-2 gap-3">

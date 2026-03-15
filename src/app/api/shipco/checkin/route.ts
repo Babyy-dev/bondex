@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrder, getHotel, updateOrder } from "@/lib/db";
 import { createShipment } from "@/lib/shipco";
 import { sendCheckinComplete } from "@/lib/email";
+import { getSession } from "@/lib/auth";
 
 // Called when hotel staff scans QR + takes photo
 export async function POST(req: NextRequest) {
   try {
     const { orderId, photoUrls } = await req.json();
+    const session = await getSession();
 
     const order = await getOrder(orderId);
     if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
@@ -95,6 +97,8 @@ export async function POST(req: NextRequest) {
       trackingNumber,
       carrier,
       shipcoShipmentId: shipmentResult?.id,
+      // Assign hotel if not already set (e.g. booking made without hotel URL param)
+      ...(!order.fromHotelId && session?.hotelId ? { fromHotelId: session.hotelId } : {}),
     });
 
     // Send check-in email (non-fatal)

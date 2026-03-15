@@ -11,7 +11,7 @@ import { Step3Date }      from "@/components/traveler/steps/Step3Date";
 import { Step4Contact }   from "@/components/traveler/steps/Step4Contact";
 import { Step5Payment }   from "@/components/traveler/steps/Step5Payment";
 import { Step6Confirmed } from "@/components/traveler/steps/Step6Confirmed";
-import type { BookingState } from "@/types";
+import type { BookingState, Hotel } from "@/types";
 
 const STEPS = ["Luggage", "Address", "Date", "Contact", "Payment"];
 
@@ -19,7 +19,7 @@ const defaultState: BookingState = {
   step: 1,
   conditionPhotos: [],
   agreedToTerms: false,
-  fromHotel: "Sakura Hotel Shinjuku",
+  fromHotel: "",
 };
 
 function BookContent() {
@@ -27,6 +27,7 @@ function BookContent() {
   const hotelParam   = searchParams.get("hotel");
 
   const [booking, setBooking]               = useState<BookingState>(defaultState);
+  const [hotels,  setHotels]                = useState<Hotel[]>([]);
   const [confirmedOrder, setConfirmedOrder] = useState<{ id: string } | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [redirectError,   setRedirectError]   = useState<string | null>(null);
@@ -56,17 +57,23 @@ function BookContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Resolve hotel name from URL param
+  // Resolve hotel name from URL param, or fetch all hotels for selector
   useEffect(() => {
-    if (!hotelParam) return;
-    fetch(`/api/hotels/${hotelParam}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((hotel) => {
-        if (!hotel) return;
-        const fullName = hotel.branchName ? `${hotel.name} ${hotel.branchName}` : hotel.name;
-        setBooking((prev) => ({ ...prev, fromHotel: fullName, fromHotelId: hotel.id }));
-      })
-      .catch(console.error);
+    if (hotelParam) {
+      fetch(`/api/hotels/${hotelParam}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((hotel) => {
+          if (!hotel) return;
+          const fullName = hotel.branchName ? `${hotel.name} ${hotel.branchName}` : hotel.name;
+          setBooking((prev) => ({ ...prev, fromHotel: fullName, fromHotelId: hotel.id }));
+        })
+        .catch(console.error);
+    } else {
+      fetch("/api/hotels")
+        .then((r) => r.ok ? r.json() : [])
+        .then(setHotels)
+        .catch(console.error);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotelParam]);
 
@@ -151,7 +158,7 @@ function BookContent() {
             exit="exit"
             transition={{ duration: 0.22, ease: "easeInOut" }}
           >
-            {booking.step === 1 && <Step1Luggage booking={booking} update={update} onNext={next} />}
+            {booking.step === 1 && <Step1Luggage booking={booking} update={update} onNext={next} hotels={hotels} />}
             {booking.step === 2 && <Step2Address booking={booking} update={update} onNext={next} />}
             {booking.step === 3 && <Step3Date    booking={booking} update={update} onNext={next} />}
             {booking.step === 4 && <Step4Contact booking={booking} update={update} onNext={next} />}
