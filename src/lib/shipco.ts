@@ -51,14 +51,10 @@ export interface ShipcoShipment {
 }
 
 async function shipcoFetch(path: string, options: RequestInit = {}) {
-  const isProxy = !!env.PROXY_SECRET;
-
   const res = await fetch(`${SHIPCO_API_BASE}${path}`, {
     ...options,
     headers: {
-      ...(isProxy
-        ? { "x-proxy-secret": env.PROXY_SECRET }
-        : { Authorization: `Bearer ${SHIPCO_API_KEY}` }),
+      Authorization: `Bearer ${SHIPCO_API_KEY}`,
       "Content-Type": "application/json",
       Accept: "application/json",
       "User-Agent": "BondEx/1.0 (shipment-integration)",
