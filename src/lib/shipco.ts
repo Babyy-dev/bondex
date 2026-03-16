@@ -57,7 +57,6 @@ async function shipcoFetch(path: string, options: RequestInit = {}) {
       Authorization: `Bearer ${SHIPCO_API_KEY}`,
       "Content-Type": "application/json",
       Accept: "application/json",
-      "User-Agent": "BondEx/1.0 (shipment-integration)",
       ...(options.headers ?? {}),
     },
   });
@@ -78,7 +77,6 @@ export async function createShipment(params: CreateShipmentParams): Promise<Ship
       setup: {
         date: params.deliveryDate,
         type: "delivery",
-        currency: "JPY",
         ...(params.carrier ? { carrier: params.carrier } : {}),
       },
       from_address: params.fromAddress,
