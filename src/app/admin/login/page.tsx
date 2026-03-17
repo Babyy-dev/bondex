@@ -1,73 +1,87 @@
-"use client";
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
-import toast from "react-hot-toast";
+"use client"
+
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { ChevronLeft, Shield } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 
 export default function AdminLogin() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading,  setLoading]  = useState(false);
-  const router = useRouter();
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password, role: "admin" }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Login failed");
-      toast.success("Logged in as Admin");
-      router.push("/admin/dashboard");
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Login failed")
+      router.push("/admin/dashboard")
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Invalid credentials");
+      setError(err instanceof Error ? err.message : "Invalid credentials")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-[#FEFCF8] flex flex-col items-center justify-center px-4">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm mb-4">
-        <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-[#7A6252] hover:text-[#1A120B] transition-colors">
-          <ChevronLeft size={16} />
+        <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <ChevronLeft className="w-4 h-4" />
           Back to BondEx
         </Link>
       </div>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-sm"
-      >
-        <div className="bg-white rounded-3xl shadow-sm border border-[#EDE8DF] p-8">
-          <div className="text-center mb-8">
-            <div className="w-14 h-14 bg-[#1A120B] rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <span className="text-2xl">🔐</span>
-            </div>
-            <h1 className="text-xl font-black text-[#1A120B]">Admin Portal</h1>
-            <p className="text-sm text-[#A89080] mt-1">BondEx Customer Service &amp; Operations</p>
+
+      <div className="w-full max-w-sm bg-card border border-border rounded-xl p-8 shadow-sm">
+        <div className="text-center mb-8">
+          <div className="w-14 h-14 bg-foreground rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Shield className="w-7 h-7 text-background" />
+          </div>
+          <h1 className="text-xl font-bold text-foreground">Admin Portal</h1>
+          <p className="text-sm text-muted-foreground mt-1">BondEx Customer Service &amp; Operations</p>
+        </div>
+
+        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Username</label>
+            <Input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="admin"
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Password</label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
           </div>
 
-          <form onSubmit={handleLogin} className="flex flex-col gap-4">
-            <Input label="Username" value={username}
-              onChange={(e) => setUsername(e.target.value)} placeholder="admin" required />
-            <Input label="Password" type="password" value={password}
-              onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
-            <Button type="submit" loading={loading} size="lg" className="w-full mt-2">
-              Log in
-            </Button>
-          </form>
+          {error && (
+            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>
+          )}
 
-        </div>
-      </motion.div>
+          <Button type="submit" disabled={loading} className="w-full mt-2">
+            {loading ? "Logging in…" : "Log in"}
+          </Button>
+        </form>
+      </div>
     </div>
-  );
+  )
 }

@@ -1,127 +1,83 @@
-"use client";
-import { motion } from "framer-motion";
-import Link from "next/link";
-import { ArrowRight, Shield, Clock, Globe } from "lucide-react";
+"use client"
 
-const TRUST_ITEMS = [
-  { icon: Shield, title: "Japan's delivery infrastructure, built in", desc: "Powered by Yamato Transport & Sagawa Express" },
-  { icon: Clock,  title: "Reliable by design",                        desc: "Rigid logistics — no judgement, no delays" },
-  { icon: Globe,  title: "Anywhere in Japan",                         desc: "Hotels, airports, stations, depots" },
-];
+import { Suspense } from "react"
+import Link from "next/link"
+import { Briefcase, Building2, Shield } from "lucide-react"
 
-export default function LandingPage() {
+export default function HomePage() {
   return (
-    <div className="min-h-screen bg-[#FEFCF8] flex flex-col overflow-hidden">
-      {/* Nav */}
-      <nav className="flex items-center justify-between px-6 py-5 max-w-lg mx-auto w-full">
-        <span className="text-2xl font-black text-[#1A120B] tracking-tight">BondEx</span>
-        <div className="flex gap-4">
-          <Link href="/hotel/login"     className="text-[#A89080] text-sm hover:text-[#1A120B] transition-colors">Hotel staff</Link>
-          <Link href="/admin/login"     className="text-[#A89080] text-sm hover:text-[#1A120B] transition-colors">Admin</Link>
-        </div>
-      </nav>
-
-      {/* Hero */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 max-w-lg mx-auto w-full text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-        >
-          {/* Floating suitcase */}
-          <div className="mb-8 flex justify-center">
-            <motion.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
-              className="w-28 h-28 bg-[#F8F3EC] border border-[#EDE8DF] rounded-full flex items-center justify-center"
-            >
-              <span className="text-6xl">🧳</span>
-            </motion.div>
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><div className="text-muted-foreground">Loading...</div></div>}>
+      <main className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-4xl">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted text-muted-foreground text-sm mb-4">
+              Wireframes
+            </div>
+            <h1 className="text-4xl font-bold tracking-tight text-foreground mb-3">
+              BondEx
+            </h1>
+            <p className="text-muted-foreground text-lg max-w-md mx-auto text-balance">
+              Luggage delivery platform for international travelers in Japan
+            </p>
           </div>
 
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="text-[#C8A96E] text-xs font-bold uppercase tracking-widest mb-3"
-          >
-            Japan Luggage Delivery
-          </motion.p>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="text-4xl font-black text-[#1A120B] leading-tight mb-4"
-          >
-            Enjoy a miniature<br />
-            <span className="text-[#C8A96E]">36-hour adventure</span><br />
-            without luggage
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="text-[#A89080] text-base mb-10 leading-relaxed"
-          >
-            Ship your bags from your hotel to your next destination.
-            We handle everything — you explore freely.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
+          <div className="grid gap-4 md:grid-cols-3">
             <Link
               href="/book"
-              className="inline-flex items-center gap-3 bg-[#1A120B] text-white font-bold text-base px-8 py-4 rounded-2xl hover:bg-[#2D1A0E] active:scale-[0.97] transition-all shadow-lg shadow-[#1A120B]/10"
+              className="group p-6 rounded-lg border-2 border-border bg-card hover:border-foreground transition-all text-left"
             >
-              Start Booking
-              <ArrowRight size={18} />
+              <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center mb-4 group-hover:bg-foreground group-hover:text-background transition-colors">
+                <Briefcase className="w-6 h-6" />
+              </div>
+              <h2 className="font-semibold text-lg text-foreground mb-2">Traveler</h2>
+              <p className="text-sm text-muted-foreground">
+                Mobile-first web app for booking luggage delivery
+              </p>
+              <div className="mt-4 text-xs text-muted-foreground">
+                7 screens
+              </div>
             </Link>
-          </motion.div>
-        </motion.div>
 
-        {/* Trust items */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
-          className="mt-14 grid grid-cols-1 gap-3 w-full"
-        >
-          {TRUST_ITEMS.map(({ icon: Icon, title, desc }, i) => (
-            <motion.div
-              key={title}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.7 + i * 0.1 }}
-              className="flex items-start gap-4 bg-white border border-[#EDE8DF] rounded-2xl px-5 py-4 text-left"
+            <Link
+              href="/hotel/login"
+              className="group p-6 rounded-lg border-2 border-border bg-card hover:border-foreground transition-all text-left"
             >
-              <div className="w-9 h-9 bg-[#F8F3EC] rounded-xl flex items-center justify-center flex-shrink-0">
-                <Icon size={16} className="text-[#C8A96E]" />
+              <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center mb-4 group-hover:bg-foreground group-hover:text-background transition-colors">
+                <Building2 className="w-6 h-6" />
               </div>
-              <div>
-                <p className="text-[#1A120B] text-sm font-semibold">{title}</p>
-                <p className="text-[#A89080] text-xs mt-0.5">{desc}</p>
+              <h2 className="font-semibold text-lg text-foreground mb-2">Hotel Staff</h2>
+              <p className="text-sm text-muted-foreground">
+                Tablet/mobile web app for check-in processing
+              </p>
+              <div className="mt-4 text-xs text-muted-foreground">
+                5 screens
               </div>
-            </motion.div>
-          ))}
-        </motion.div>
+            </Link>
 
-        {/* Demo links */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.1 }}
-          className="mt-8 flex flex-wrap gap-3 justify-center"
-        >
-          <Link href="/hotel/login"    className="text-xs text-[#C8A96E] hover:text-[#1A120B] transition-colors underline">Hotel Staff Portal →</Link>
-          <span className="text-[#EDE8DF] text-xs">|</span>
-          <Link href="/admin/login"    className="text-xs text-[#C8A96E] hover:text-[#1A120B] transition-colors underline">Admin Dashboard →</Link>
-        </motion.div>
-      </div>
-    </div>
-  );
+            <Link
+              href="/admin/login"
+              className="group p-6 rounded-lg border-2 border-border bg-card hover:border-foreground transition-all text-left"
+            >
+              <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center mb-4 group-hover:bg-foreground group-hover:text-background transition-colors">
+                <Shield className="w-6 h-6" />
+              </div>
+              <h2 className="font-semibold text-lg text-foreground mb-2">Admin / CS</h2>
+              <p className="text-sm text-muted-foreground">
+                Desktop dashboard for operations and support
+              </p>
+              <div className="mt-4 text-xs text-muted-foreground">
+                4 screens
+              </div>
+            </Link>
+          </div>
+
+          <div className="mt-12 p-4 rounded-lg bg-muted/50 border border-border">
+            <p className="text-sm text-muted-foreground text-center">
+              <span className="font-medium text-foreground">Design Philosophy:</span> Decision OS that eliminates human judgment, stays silent during normal operations, surfaces only the next single action during exceptions.
+            </p>
+          </div>
+        </div>
+      </main>
+    </Suspense>
+  )
 }
