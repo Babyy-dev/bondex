@@ -32,15 +32,29 @@ export async function POST(req: NextRequest) {
     // Fetch hotel to get real pickup address
     const hotel = order.fromHotelId ? await getHotel(order.fromHotelId) : null;
 
+    // Require complete hotel address for label generation
+    const address1 = hotel?.addressLine1 ?? hotel?.address;
+    const city = hotel?.city;
+    const state = hotel?.prefecture;
+    const zip = hotel?.postalCode;
+    const phone = hotel?.contactPhone;
+
+    if (!address1 || !city || !state || !zip) {
+      return NextResponse.json(
+        { error: "Hotel address is incomplete. Update hotel profile before check-in." },
+        { status: 422 }
+      );
+    }
+
     const fromAddress = {
       full_name: "BondEx Staff",
-      company:   hotel ? [hotel.name, hotel.branchName].filter(Boolean).join(" ") : order.fromHotel,
-      address1:  hotel?.addressLine1 ?? hotel?.address ?? "1-2-3 Kabukicho",
-      city:      hotel?.city       ?? "Shinjuku",
-      state:     hotel?.prefecture ?? "Tokyo",
-      zip:       hotel?.postalCode ?? "160-0021",
-      country:   "JP",
-      phone:     hotel?.contactPhone ?? "0312345678",
+      company: hotel ? [hotel.name, hotel.branchName].filter(Boolean).join(" ") : order.fromHotel,
+      address1,
+      city,
+      state,
+      zip,
+      country: "JP",
+      phone: phone ?? "",
     };
 
     const toAddress = {
@@ -55,39 +69,27 @@ export async function POST(req: NextRequest) {
       phone: order.guestPhone,
     };
 
-    let shipmentResult;
-    let labelUrl: string | undefined;
-    let trackingNumber: string | undefined;
-    let carrier: string | undefined;
+    // Map hotel carrier slug to Ship&Co carrier code
+    const CARRIER_CODES: Record<string, string> = {
+      yamato: "yamato_business",
+      sagawa: "sagawa_yu_pack",
+    };
+    const carrierCode = hotel?.carrier ? CARRIER_CODES[hotel.carrier] : undefined;
 
-    try {
-      // Map hotel carrier slug to Ship&Co carrier code
-      const CARRIER_CODES: Record<string, string> = {
-        yamato: "yamato_business",
-        sagawa: "sagawa_yu_pack",
-      };
-      const carrierCode = hotel?.carrier ? CARRIER_CODES[hotel.carrier] : undefined;
+    const shipmentResult = await createShipment({
+      fromAddress,
+      toAddress,
+      size: order.size,
+      deliveryDate: order.deliveryDate,
+      orderId: order.id,
+      guestName: order.guestName,
+      checkInDate: new Date().toISOString().split("T")[0],
+      carrier: carrierCode,
+    });
 
-      shipmentResult = await createShipment({
-        fromAddress,
-        toAddress,
-        size: order.size,
-        deliveryDate: order.deliveryDate,
-        orderId: order.id,
-        guestName: order.guestName,
-        checkInDate: new Date().toISOString().split("T")[0],
-        carrier: carrierCode,
-      });
-      labelUrl = shipmentResult.label_url;
-      trackingNumber = shipmentResult.tracking_number;
-      carrier = shipmentResult.carrier ?? "Yamato Transport";
-    } catch (shipcoErr) {
-      console.error("Ship&Co error (falling back to mock):", shipcoErr);
-      // Non-fatal: fall back to mock label for local/demo testing
-      labelUrl = `/api/labels/mock/${orderId}`;
-      trackingNumber = `MOCK-${Date.now()}`;
-      carrier = "Yamato Transport (Mock)";
-    }
+    const labelUrl = shipmentResult.label_url;
+    const trackingNumber = shipmentResult.tracking_number;
+    const carrier = shipmentResult.carrier ?? "Yamato Transport";
 
     const updated = await updateOrder(orderId, {
       status: "CHECKED_IN",
@@ -96,7 +98,7 @@ export async function POST(req: NextRequest) {
       labelUrl,
       trackingNumber,
       carrier,
-      shipcoShipmentId: shipmentResult?.id,
+      shipcoShipmentId: shipmentResult.id,
       // Assign hotel if not already set (e.g. booking made without hotel URL param)
       ...(!order.fromHotelId && session?.hotelId ? { fromHotelId: session.hotelId } : {}),
     });

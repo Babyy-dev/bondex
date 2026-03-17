@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react"
 import { ArrowLeft, CheckCircle, Clock, Truck, Package, MapPin, Building2, Copy, Check, Info, AlertTriangle, Bell, X } from "lucide-react"
 import type { BookingData } from "../traveler-flow"
 import { getBookingById, markMessageRead, type BookingMessage } from "@/lib/booking-store"
+import type { Order, OrderStatus } from "@/types"
 
 interface StatusDashboardProps {
   data: BookingData
@@ -20,14 +21,40 @@ interface StatusStep {
   icon: React.ReactNode
 }
 
+function mapApiStatusToKey(status: OrderStatus): StatusKey {
+  const map: Record<OrderStatus, StatusKey> = {
+    CREATED: "scheduled",
+    PAID: "scheduled",
+    CHECKED_IN: "received",
+    HANDED_TO_CARRIER: "in-transit",
+    IN_TRANSIT: "in-transit",
+    DELIVERED: "delivered",
+    AUTO_CANCELLED: "scheduled",
+    CARRIER_REFUSED: "scheduled",
+  }
+  return map[status] || "scheduled"
+}
+
 export function StatusDashboard({ data, onBack }: StatusDashboardProps) {
   const [copiedTracking, setCopiedTracking] = useState(false)
   const [messages, setMessages] = useState<BookingMessage[]>([])
   const [dismissedMessages, setDismissedMessages] = useState<Set<string>>(new Set())
+  const [apiOrder, setApiOrder] = useState<Order | null>(null)
 
   const orderId = data.orderId || "BX-DEMO123"
 
-  // Load live status and messages from booking store
+  // Fetch real order from API
+  const fetchOrder = useCallback(() => {
+    if (!orderId || orderId === "BX-DEMO123") return
+    fetch(`/api/orders/${orderId}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((order: Order | null) => {
+        if (order) setApiOrder(order)
+      })
+      .catch(() => {})
+  }, [orderId])
+
+  // Load live status and messages from booking store (fallback)
   const loadLiveData = useCallback(() => {
     const live = getBookingById(orderId)
     if (live?.messages) {
@@ -36,27 +63,38 @@ export function StatusDashboard({ data, onBack }: StatusDashboardProps) {
   }, [orderId])
 
   useEffect(() => {
+    fetchOrder()
     loadLiveData()
+    // Poll every 10 seconds
+    const interval = setInterval(fetchOrder, 10000)
     const h = () => loadLiveData()
     window.addEventListener("bondex-booking-updated", h)
-    return () => window.removeEventListener("bondex-booking-updated", h)
-  }, [loadLiveData])
-
-  // Map live booking status to StatusKey
-  const liveBooking = getBookingById(orderId)
-  const mapToStatusKey = (s?: string): StatusKey => {
-    if (!s) return "in-transit"
-    const map: Record<string, StatusKey> = {
-      confirmed: "scheduled",
-      waiting: "scheduled",
-      checked_in: "received",
-      picked_up: "in-transit",
-      in_transit: "in-transit",
-      delivered: "delivered",
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener("bondex-booking-updated", h)
     }
-    return map[s] || "in-transit"
+  }, [fetchOrder, loadLiveData])
+
+  // Determine current status: real API first, fallback to sessionStorage
+  let currentStatus: StatusKey
+  if (apiOrder) {
+    currentStatus = mapApiStatusToKey(apiOrder.status)
+  } else {
+    const liveBooking = getBookingById(orderId)
+    const mapLocalStatus = (s?: string): StatusKey => {
+      if (!s) return "scheduled"
+      const map: Record<string, StatusKey> = {
+        confirmed: "scheduled",
+        waiting: "scheduled",
+        checked_in: "received",
+        picked_up: "in-transit",
+        in_transit: "in-transit",
+        delivered: "delivered",
+      }
+      return map[s] || "scheduled"
+    }
+    currentStatus = liveBooking ? mapLocalStatus(liveBooking.status) : "scheduled"
   }
-  const currentStatus: StatusKey = liveBooking ? mapToStatusKey(liveBooking.status) : "in-transit"
 
   const handleMarkRead = (msgId: string) => {
     markMessageRead(orderId, msgId)
@@ -64,13 +102,14 @@ export function StatusDashboard({ data, onBack }: StatusDashboardProps) {
   }
 
   const visibleMessages = messages.filter((m) => !dismissedMessages.has(m.id))
-  const trackingNumber = "YMT-9876543210"
-  const carrierName = "Yamato Transport"
+  // Use real tracking number from API if available
+  const trackingNumber = apiOrder?.trackingNumber || "—"
+  const carrierName = apiOrder?.carrier || "Yamato Transport"
   const deliveryDest = data.destination.name || "Narita Airport Terminal 1"
   const deliveryDate = data.deliveryDate.selected || "Feb 8, 2026"
 
   const trackingAvailableStatuses: StatusKey[] = ["in-transit", "delivered"]
-  const showTracking = trackingAvailableStatuses.includes(currentStatus)
+  const showTracking = trackingAvailableStatuses.includes(currentStatus) && trackingNumber !== "—"
 
   const steps: StatusStep[] = [
     {

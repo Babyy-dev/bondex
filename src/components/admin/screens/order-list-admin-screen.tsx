@@ -5,6 +5,7 @@ import { ArrowLeft, Search, Package, Filter } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getAllBookings, type StoredBooking } from "@/lib/booking-store"
+import type { Order as ApiOrder } from "@/types"
 
 interface OrderListAdminScreenProps {
   onSelectOrder: (orderId: string) => void
@@ -13,14 +14,14 @@ interface OrderListAdminScreenProps {
 }
 
 const mockOrders = [
-  { id: "BX-A1B2C3", guest: "Tanaka Yuki", hotel: "Park Hyatt Tokyo", items: 2, status: "in-transit", createdAt: "2026-02-02", actionRequired: false },
+  { id: "BX-A1B2C3", guest: "Tanaka Yuki", hotel: "Park Hyatt Tokyo", items: 2, status: "in-transit", createdAt: "2026-02-02", actionRequired: false, actionLabel: "" },
   { id: "BX-D4E5F6", guest: "Smith John", hotel: "Aman Tokyo", items: 1, status: "checked-in", createdAt: "2026-02-03", actionRequired: true, actionLabel: "Payment failure" },
-  { id: "BX-G7H8I9", guest: "Mueller Hans", hotel: "The Ritz-Carlton Kyoto", items: 3, status: "delivered", createdAt: "2026-02-01", actionRequired: false },
+  { id: "BX-G7H8I9", guest: "Mueller Hans", hotel: "The Ritz-Carlton Kyoto", items: 3, status: "delivered", createdAt: "2026-02-01", actionRequired: false, actionLabel: "" },
   { id: "BX-J0K1L2", guest: "Lee Min-Jun", hotel: "Park Hyatt Tokyo", items: 1, status: "pending", createdAt: "2026-02-04", actionRequired: true, actionLabel: "Uncollected luggage" },
   { id: "BX-M3N4O5", guest: "Garcia Maria", hotel: "Hoshinoya Fuji", items: 2, status: "exception", createdAt: "2026-02-03", actionRequired: true, actionLabel: "Carrier exception" },
-  { id: "BX-P6Q7R8", guest: "Kim Soo-Jin", hotel: "Aman Tokyo", items: 1, status: "delivered", createdAt: "2026-01-30", actionRequired: false },
-  { id: "BX-S9T0U1", guest: "Williams Emma", hotel: "Park Hyatt Tokyo", items: 2, status: "in-transit", createdAt: "2026-02-02", actionRequired: false },
-  { id: "BX-V2W3X4", guest: "Brown David", hotel: "The Ritz-Carlton Kyoto", items: 1, status: "cancelled", createdAt: "2026-02-01", actionRequired: false },
+  { id: "BX-P6Q7R8", guest: "Kim Soo-Jin", hotel: "Aman Tokyo", items: 1, status: "delivered", createdAt: "2026-01-30", actionRequired: false, actionLabel: "" },
+  { id: "BX-S9T0U1", guest: "Williams Emma", hotel: "Park Hyatt Tokyo", items: 2, status: "in-transit", createdAt: "2026-02-02", actionRequired: false, actionLabel: "" },
+  { id: "BX-V2W3X4", guest: "Brown David", hotel: "The Ritz-Carlton Kyoto", items: 1, status: "cancelled", createdAt: "2026-02-01", actionRequired: false, actionLabel: "" },
 ]
 
 function toAdminOrder(b: StoredBooking) {
@@ -37,29 +38,55 @@ function toAdminOrder(b: StoredBooking) {
   }
 }
 
+function fromApiOrder(o: ApiOrder) {
+  return {
+    id: o.id,
+    guest: o.guestName,
+    hotel: o.fromHotel,
+    items: 1,
+    status: o.status.toLowerCase().replace(/_/g, "-"),
+    createdAt: o.createdAt.slice(0, 10),
+    actionRequired: !!o.flagged,
+    actionLabel: o.flagged ? "Flagged" : "",
+  }
+}
+
 export function OrderListAdminScreen({ onSelectOrder, onBack, initialFilter = "all" }: OrderListAdminScreenProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>(initialFilter)
   const [liveOrders, setLiveOrders] = useState<ReturnType<typeof toAdminOrder>[]>([])
+  const [apiOrders, setApiOrders] = useState<ReturnType<typeof fromApiOrder>[]>([])
 
   useEffect(() => {
     setStatusFilter(initialFilter)
   }, [initialFilter])
+
+  const fetchApiOrders = useCallback(() => {
+    fetch("/api/orders")
+      .then((res) => res.ok ? res.json() : [])
+      .then((orders: ApiOrder[]) => {
+        if (Array.isArray(orders)) setApiOrders(orders.map(fromApiOrder))
+      })
+      .catch(() => {})
+  }, [])
 
   const load = useCallback(() => {
     setLiveOrders(getAllBookings().map(toAdminOrder))
   }, [])
 
   useEffect(() => {
+    fetchApiOrders()
     load()
     const h = () => load()
     window.addEventListener("bondex-booking-updated", h)
     return () => window.removeEventListener("bondex-booking-updated", h)
-  }, [load])
+  }, [fetchApiOrders, load])
 
+  // Merge: API orders first, then sessionStorage, then mock — deduplicate by id
   const allOrders = [
-    ...liveOrders,
-    ...mockOrders.filter((o) => !liveOrders.some((l) => l.id === o.id)),
+    ...apiOrders,
+    ...liveOrders.filter((l) => !apiOrders.some((a) => a.id === l.id)),
+    ...mockOrders.filter((m) => !apiOrders.some((a) => a.id === m.id) && !liveOrders.some((l) => l.id === m.id)),
   ]
 
   const filteredOrders = allOrders.filter(order => {

@@ -1,27 +1,41 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Search, Plus, Building2, MapPin, ChevronRight } from "lucide-react"
+import type { Hotel } from "@/types"
 
 interface HotelListScreenProps {
   onAddHotel: () => void
   onBack: () => void
 }
 
-const mockHotels = [
-  { id: "h1", name: "Park Hyatt Tokyo", branch: "Shinjuku", region: "Tokyo", status: "active" as const, orderCount: 42 },
-  { id: "h2", name: "The Ritz-Carlton Kyoto", branch: "Main", region: "Kyoto", status: "active" as const, orderCount: 28 },
-  { id: "h3", name: "Aman Tokyo", branch: "Otemachi", region: "Tokyo", status: "active" as const, orderCount: 15 },
-  { id: "h4", name: "Hoshinoya Fuji", branch: "Main", region: "Yamanashi", status: "active" as const, orderCount: 8 },
-  { id: "h5", name: "Sakura Hotel Shinjuku", branch: "Main", region: "Tokyo", status: "paused" as const, orderCount: 0 },
+const mockHotels: Hotel[] = [
+  { id: "h1", name: "Park Hyatt Tokyo", branchName: "Shinjuku", address: "Tokyo", status: "active", dailyOrderCount: 42, carrier: "yamato", cutoffTime: "15:00", printerType: "bluetooth_thermal", labelSize: "62mm" },
+  { id: "h2", name: "The Ritz-Carlton Kyoto", branchName: "Main", address: "Kyoto", status: "active", dailyOrderCount: 28, carrier: "yamato", cutoffTime: "15:00", printerType: "bluetooth_thermal", labelSize: "62mm" },
+  { id: "h3", name: "Aman Tokyo", branchName: "Otemachi", address: "Tokyo", status: "active", dailyOrderCount: 15, carrier: "sagawa", cutoffTime: "15:00", printerType: "usb_thermal", labelSize: "62mm" },
+  { id: "h4", name: "Hoshinoya Fuji", branchName: "Main", address: "Yamanashi", status: "active", dailyOrderCount: 8, carrier: "yamato", cutoffTime: "15:00", printerType: "none", labelSize: "62mm" },
+  { id: "h5", name: "Sakura Hotel Shinjuku", branchName: "Main", address: "Tokyo", status: "paused", dailyOrderCount: 0, carrier: "yamato", cutoffTime: "15:00", printerType: "none", labelSize: "62mm" },
 ]
 
 export function HotelListScreen({ onAddHotel }: HotelListScreenProps) {
   const [search, setSearch] = useState("")
+  const [hotels, setHotels] = useState<Hotel[]>(mockHotels)
+  const [loading, setLoading] = useState(true)
 
-  const filtered = mockHotels.filter(h =>
+  useEffect(() => {
+    fetch("/api/hotels")
+      .then((res) => res.ok ? res.json() : [])
+      .then((data: Hotel[]) => {
+        if (Array.isArray(data) && data.length > 0) setHotels(data)
+        // else keep mockHotels as fallback
+      })
+      .catch(() => {/* keep mockHotels */})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = hotels.filter(h =>
     h.name.toLowerCase().includes(search.toLowerCase()) ||
-    h.region.toLowerCase().includes(search.toLowerCase())
+    (h.address || "").toLowerCase().includes(search.toLowerCase())
   )
 
   return (
@@ -31,7 +45,7 @@ export function HotelListScreen({ onAddHotel }: HotelListScreenProps) {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Hotels</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {mockHotels.length} registered hotels
+            {loading ? "Loading..." : `${hotels.length} registered hotels`}
           </p>
         </div>
         <button
@@ -69,12 +83,12 @@ export function HotelListScreen({ onAddHotel }: HotelListScreenProps) {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-foreground">{hotel.name}</span>
-                  {hotel.branch !== "Main" && (
-                    <span className="text-xs text-muted-foreground">({hotel.branch})</span>
+                  {hotel.branchName && hotel.branchName !== "Main" && (
+                    <span className="text-xs text-muted-foreground">({hotel.branchName})</span>
                   )}
                   <span className={`text-xs px-1.5 py-0.5 rounded ${
-                    hotel.status === "active" 
-                      ? "bg-success/10 text-success" 
+                    hotel.status === "active"
+                      ? "bg-foreground/10 text-foreground"
                       : "bg-muted text-muted-foreground"
                   }`}>
                     {hotel.status === "active" ? "Active" : "Paused"}
@@ -82,8 +96,8 @@ export function HotelListScreen({ onAddHotel }: HotelListScreenProps) {
                 </div>
                 <div className="flex items-center gap-1 mt-0.5">
                   <MapPin className="w-3 h-3 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">{hotel.region}</span>
-                  <span className="text-xs text-muted-foreground ml-2">{hotel.orderCount} orders</span>
+                  <span className="text-xs text-muted-foreground">{hotel.address}</span>
+                  <span className="text-xs text-muted-foreground ml-2">{hotel.dailyOrderCount} orders</span>
                 </div>
               </div>
             </div>

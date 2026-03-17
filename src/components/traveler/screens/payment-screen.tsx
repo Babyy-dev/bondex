@@ -1,10 +1,15 @@
 "use client"
 
-import { useState } from "react"
-import { ArrowLeft, CreditCard, Lock, Package } from "lucide-react"
+import { useState, useEffect } from "react"
+import { ArrowLeft, CreditCard, Lock, Package, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { BookingData } from "../traveler-flow"
+import { getSizeInfo } from "@/lib/pricing"
+import { loadStripe } from "@stripe/stripe-js"
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js"
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "")
 
 interface PaymentScreenProps {
   data: BookingData
@@ -13,74 +18,108 @@ interface PaymentScreenProps {
   onBack: () => void
 }
 
+// Inner form that uses Stripe hooks (must be inside <Elements>)
+function StripeCardForm({
+  data,
+  onNext,
+  isProcessing,
+  setIsProcessing,
+  setPaymentError,
+}: {
+  data: BookingData
+  onNext: () => void
+  isProcessing: boolean
+  setIsProcessing: (v: boolean) => void
+  setPaymentError: (v: string | null) => void
+}) {
+  const stripe = useStripe()
+  const elements = useElements()
+
+  const handleSubmit = async () => {
+    if (!stripe || !elements) return
+    setIsProcessing(true)
+    setPaymentError(null)
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: window.location.origin + "/book?step=completion&order_id=" + (data.orderId || ""),
+      },
+    })
+    if (error) {
+      setPaymentError(error.message || "Payment failed. Please try again.")
+      setIsProcessing(false)
+    }
+    // On success, Stripe redirects to return_url — onNext() would only be called in redirect flow
+  }
+
+  return (
+    <div className="space-y-4">
+      <PaymentElement />
+      <Button
+        onClick={handleSubmit}
+        disabled={!stripe || isProcessing}
+        className="w-full h-12"
+      >
+        {isProcessing ? "Processing..." : `Pay`}
+      </Button>
+    </div>
+  )
+}
+
 export function PaymentScreen({ data, onUpdate, onNext, onBack }: PaymentScreenProps) {
   const [paymentMethod, setPaymentMethod] = useState<"apple" | "google" | "card" | null>(null)
-  const [cardNumber, setCardNumber] = useState("")
-  const [expiry, setExpiry] = useState("")
-  const [cvc, setCvc] = useState("")
-  const [name, setName] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
+  const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const [fetchingSecret, setFetchingSecret] = useState(false)
+  const [paymentError, setPaymentError] = useState<string | null>(null)
+  const [apiAmount, setApiAmount] = useState<number | null>(null)
 
-  const calculatePrice = () => {
-    let total = 0
-    for (const item of data.items) {
-      if (item.size === "S") total += 2500
-      if (item.size === "M") total += 3500
-      if (item.size === "L") total += 4500
-      if (item.size === "LL") total += 6000
-    }
-    return total
-  }
+  const calculatePrice = () =>
+    data.items.reduce((sum, item) => sum + getSizeInfo(item.size).price, 0)
 
-  const totalPrice = calculatePrice()
-  // Surcharge estimate (worst-case one size up per item)
-  const maxSurcharge = data.items.length * 1500
-  const estimatedMax = totalPrice + maxSurcharge
+  const calculateMaxPrice = () =>
+    data.items.reduce((sum, item) => sum + getSizeInfo(item.size).maxPrice, 0)
 
-  const formatCardNumber = (value: string) => {
-    const v = value.replace(/\s+/g, "").replace(/[^0-9]/gi, "")
-    const matches = v.match(/\d{4,16}/g)
-    const match = (matches && matches[0]) || ""
-    const parts = []
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4))
-    }
-    return parts.length ? parts.join(" ") : value
-  }
+  const totalPrice = apiAmount ?? calculatePrice()
+  const estimatedMax = calculateMaxPrice()
 
-  const formatExpiry = (value: string) => {
-    const v = value.replace(/\s+/g, "").replace(/[^0-9]/gi, "")
-    if (v.length >= 2) {
-      return v.substring(0, 2) + "/" + v.substring(2, 4)
-    }
-    return v
-  }
+  // Fetch payment intent when component mounts (order should already be created)
+  useEffect(() => {
+    if (!data.orderId) return
+    setFetchingSecret(true)
+    fetch("/api/stripe/create-payment-intent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sizes: data.items.map((i) => i.size),
+        size: data.items[0]?.size || "M",
+        orderId: data.orderId,
+        guestEmail: data.contact.email,
+      }),
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.clientSecret) {
+          setClientSecret(json.clientSecret)
+          if (json.amount) setApiAmount(json.amount)
+        } else {
+          setPaymentError("Could not initialize payment. Please try again.")
+        }
+      })
+      .catch(() => {
+        setPaymentError("Could not initialize payment. Please try again.")
+      })
+      .finally(() => setFetchingSecret(false))
+  }, [data.orderId, data.items, data.contact.email])
 
+  // Wallet pay handlers — fall back to mock for demo (no real wallet integration without Stripe)
   const handleWalletPay = (method: "apple" | "google") => {
     setPaymentMethod(method)
     setIsProcessing(true)
     setTimeout(() => {
-      onUpdate({
-        ...data,
-        orderId: `BX-${Date.now().toString(36).toUpperCase()}`,
-      })
       onNext()
     }, 1500)
   }
-
-  const handleCardPay = () => {
-    setPaymentMethod("card")
-    setIsProcessing(true)
-    setTimeout(() => {
-      onUpdate({
-        ...data,
-        orderId: `BX-${Date.now().toString(36).toUpperCase()}`,
-      })
-      onNext()
-    }, 1500)
-  }
-
-  const canSubmitCard = cardNumber.length >= 19 && expiry.length >= 5 && cvc.length >= 3 && name
 
   return (
     <div className="flex-1 flex flex-col max-w-md mx-auto w-full">
@@ -112,7 +151,7 @@ export function PaymentScreen({ data, onUpdate, onNext, onBack }: PaymentScreenP
                   <span>Item {index + 1} ({item.size})</span>
                 </div>
                 <span className="text-muted-foreground">
-                  {item.size === "S" ? "\u00a52,500" : item.size === "M" ? "\u00a53,500" : item.size === "L" ? "\u00a54,500" : "\u00a56,000"}
+                  ¥{getSizeInfo(item.size).price.toLocaleString()}
                 </span>
               </div>
             ))}
@@ -194,68 +233,41 @@ export function PaymentScreen({ data, onUpdate, onNext, onBack }: PaymentScreenP
           <div className="flex-1 h-px bg-border" />
         </div>
 
-        {/* Credit card - always visible */}
+        {/* Credit card — real Stripe PaymentElement */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
             <CreditCard className="w-4 h-4" />
             <span>Credit card</span>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Card number</label>
-            <div className="relative">
-              <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="1234 5678 9012 3456"
-                value={cardNumber}
-                onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                maxLength={19}
-                className="pl-10"
-                disabled={isProcessing}
-              />
+          {paymentError && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+              <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+              <p className="text-xs text-destructive">{paymentError}</p>
             </div>
-          </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Expiry</label>
-              <Input
-                placeholder="MM/YY"
-                value={expiry}
-                onChange={(e) => setExpiry(formatExpiry(e.target.value))}
-                maxLength={5}
-                disabled={isProcessing}
+          {fetchingSecret && (
+            <div className="text-sm text-muted-foreground text-center py-4">Initializing payment...</div>
+          )}
+
+          {!fetchingSecret && clientSecret && (
+            <Elements stripe={stripePromise} options={{ clientSecret }}>
+              <StripeCardForm
+                data={data}
+                onNext={onNext}
+                isProcessing={isProcessing}
+                setIsProcessing={setIsProcessing}
+                setPaymentError={setPaymentError}
               />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">CVC</label>
-              <Input
-                placeholder="123"
-                value={cvc}
-                onChange={(e) => setCvc(e.target.value.replace(/[^0-9]/g, ""))}
-                maxLength={4}
-                disabled={isProcessing}
-              />
-            </div>
-          </div>
+            </Elements>
+          )}
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Cardholder name</label>
-            <Input
-              placeholder="Name on card"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={isProcessing}
-            />
-          </div>
-
-          <Button
-            onClick={handleCardPay}
-            disabled={!canSubmitCard || isProcessing}
-            className="w-full h-12"
-          >
-            {isProcessing && paymentMethod === "card" ? "Processing..." : `Pay \u00a5${totalPrice.toLocaleString()}`}
-          </Button>
+          {!fetchingSecret && !clientSecret && !paymentError && !data.orderId && (
+            <p className="text-xs text-muted-foreground text-center py-2">
+              Order not yet created — complete previous steps first.
+            </p>
+          )}
         </div>
       </div>
     </div>

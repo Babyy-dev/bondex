@@ -5,18 +5,25 @@ import type { LuggageSize } from "@/types";
 
 export async function POST(req: NextRequest) {
   try {
-    const { size, orderId, guestEmail } = await req.json();
+    const { size, sizes, orderId, guestEmail } = await req.json();
 
-    const sizeInfo = getSizeInfo(size as LuggageSize);
-    const amount = sizeInfo.price; // JPY – already smallest unit
+    // Support multi-item orders via `sizes` array; fall back to single `size`
+    const sizeList: LuggageSize[] = Array.isArray(sizes) && sizes.length > 0
+      ? sizes
+      : [size as LuggageSize];
+
+    const amount = sizeList.reduce((sum, s) => sum + getSizeInfo(s).price, 0);
+    const description = sizeList.length === 1
+      ? `BondEx luggage delivery – ${getSizeInfo(sizeList[0]).label} (${orderId})`
+      : `BondEx luggage delivery – ${sizeList.length} items (${orderId})`;
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency: "jpy",
       automatic_payment_methods: { enabled: true },
-      metadata: { orderId, size },
+      metadata: { orderId, sizes: sizeList.join(",") },
       receipt_email: guestEmail,
-      description: `BondEx luggage delivery – ${sizeInfo.label} (${orderId})`,
+      description,
     });
 
     return NextResponse.json({

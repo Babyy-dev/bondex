@@ -12,12 +12,10 @@ interface LoginScreenProps {
   onBack: () => void
 }
 
-// Demo credentials (replace with real API call in production)
+// Fallback for local dev when API is unavailable (overridden by env vars HOTEL_HTL001_PASS / HOTEL_HTL002_PASS)
 const DEMO_CREDENTIALS: Record<string, string> = {
-  "SAKURA01": "bondex2026",
-  "KYOTO02":  "bondex2026",
-  "OSAKA03":  "bondex2026",
-  "DEMO":     "demo",
+  "HTL-001": process.env.NEXT_PUBLIC_DEMO_HOTEL_PASS ?? "demo123",
+  "HTL-002": process.env.NEXT_PUBLIC_DEMO_HOTEL_PASS ?? "demo123",
 }
 
 export function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
@@ -30,16 +28,35 @@ export function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
   const handleSubmit = async () => {
     setError(null)
     setIsLoading(true)
-    await new Promise(r => setTimeout(r, 200 + Math.random() * 200))
     const code = hotelCode.trim().toUpperCase()
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ facilityId: code, password, role: "hotel" }),
+      })
+      if (res.ok) {
+        sessionStorage.setItem("bondex_hotel_session", JSON.stringify({
+          hotelCode: code,
+          loginAt: Date.now(),
+          expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+        }))
+        onLogin()
+        return
+      }
+    } catch {
+      // Fall through to local credentials check for demo
+    }
+
+    // Fallback: check local demo credentials
     const expectedPassword = DEMO_CREDENTIALS[code]
     if (!expectedPassword) {
-      setError("Hotel code not found. Please contact BondEx support.")
+      setError("Incorrect hotel code or password.")
       setIsLoading(false)
       return
     }
     if (password !== expectedPassword) {
-      setError("Incorrect password.")
+      setError("Incorrect hotel code or password.")
       setIsLoading(false)
       return
     }
@@ -87,10 +104,8 @@ export function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
           <div className="mt-3 p-3 rounded-lg bg-muted/50 border border-border space-y-1.5">
             <p className="text-[10px] font-bold text-muted-foreground text-center uppercase tracking-wider">Demo Credentials</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span className="text-right font-mono font-bold">DEMO</span><span className="font-mono">demo</span>
-              <span className="text-right font-mono font-bold">SAKURA01</span><span className="font-mono">bondex2026</span>
-              <span className="text-right font-mono font-bold">KYOTO02</span><span className="font-mono">bondex2026</span>
-              <span className="text-right font-mono font-bold">OSAKA03</span><span className="font-mono">bondex2026</span>
+              <span className="text-right font-mono font-bold">HTL-001</span><span className="font-mono">demo123</span>
+              <span className="text-right font-mono font-bold">HTL-002</span><span className="font-mono">demo123</span>
             </div>
           </div>
           {error && (

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo, useRef } from "react"
-import { 
+import { useState, useMemo, useRef, useEffect } from "react"
+import {
   ArrowLeft, MapPin, Search, User, AlertTriangle,
   ArrowRight, CheckCircle2, X, Clock,
   Calendar, PlaneTakeoff, Hotel, ShieldCheck, AlertCircle, Upload, FileText
@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { BookingData } from "../traveler-flow"
+import type { Hotel as HotelType } from "@/types"
 
 interface DestinationScreenProps {
   data: BookingData
@@ -20,31 +21,53 @@ interface DestinationScreenProps {
 // 初期値としての配送元（QRスキャン想定）
 const DEFAULT_PICKUP = { id: "p1", name: "Sakura Hotel Shinjuku", address: "2-21-4 Kabukicho, Shinjuku" }
 
-// プロ選定：大阪・京都・東日本の主要施設マスターデータ
-const mockFacilities = [
-  // --- 大阪エリア ---
-  { id: "osaka-1", name: "W Osaka", address: "4-1-3 Minami Semba, Chuo-ku, Osaka", destType: "hotel" },
-  { id: "osaka-2", name: "Conrad Osaka", address: "3-2-4 Nakanoshima, Kita-ku, Osaka", destType: "hotel" },
-  { id: "osaka-3", name: "Centara Grand Hotel Osaka", address: "2-11-50 Namba-naka, Naniwa-ku, Osaka", destType: "hotel" },
-
-  // --- 京都エリア ---
-  { id: "kyoto-1", name: "The Ritz-Carlton Kyoto", address: "Kamogawa Nijo-ohashi Kado, Nakagyo-ku, Kyoto", destType: "hotel" },
-  { id: "kyoto-2", name: "Ace Hotel Kyoto", address: "245-2 Kurumayacho, Nakagyo-ku, Kyoto", destType: "hotel" },
-  { id: "kyoto-3", name: "Park Hyatt Kyoto", address: "360 Kodaiji Masuyacho, Higashiyama-ku, Kyoto", destType: "hotel" },
-
-  // --- 東日本・東京・その他エリア ---
-  { id: "tokyo-1", name: "Aman Tokyo", address: "1-5-6 Otemachi, Chiyoda-ku, Tokyo", destType: "hotel" },
-  { id: "tokyo-2", name: "Hotel Nikko Narita", address: "500 Tokome, Narita, Chiba", destType: "hotel" },
-  { id: "tokyo-3", name: "The Kahala Hotel & Resort Yokohama", address: "1-1-3 Minatomirai, Nishi-ku, Yokohama, Kanagawa", destType: "hotel" },
-  { id: "hokkaido-1", name: "Park Hyatt Niseko Hanazono", address: "328-47 Iwaobetsu, Kutchan, Hokkaido", destType: "hotel" },
-
-  // --- 空港（物流拠点） ---
+// Static airports/stations fallback (always shown alongside real hotels)
+const staticFacilities = [
   { id: "ap-1", name: "Narita Airport T1", address: "Gokoyama, Narita, Chiba", destType: "airport" },
   { id: "ap-2", name: "Haneda Airport T3", address: "Hanedakuko, Ota City, Tokyo", destType: "airport" },
   { id: "ap-3", name: "Kansai International Airport (KIX)", address: "Senshu-kuko Kita, Izumisano, Osaka", destType: "airport" },
 ]
 
+// プロ選定：大阪・京都・東日本の主要施設マスターデータ (fallback if API fails)
+const mockFacilities = [
+  { id: "osaka-1", name: "W Osaka", address: "4-1-3 Minami Semba, Chuo-ku, Osaka", destType: "hotel" },
+  { id: "osaka-2", name: "Conrad Osaka", address: "3-2-4 Nakanoshima, Kita-ku, Osaka", destType: "hotel" },
+  { id: "osaka-3", name: "Centara Grand Hotel Osaka", address: "2-11-50 Namba-naka, Naniwa-ku, Osaka", destType: "hotel" },
+  { id: "kyoto-1", name: "The Ritz-Carlton Kyoto", address: "Kamogawa Nijo-ohashi Kado, Nakagyo-ku, Kyoto", destType: "hotel" },
+  { id: "kyoto-2", name: "Ace Hotel Kyoto", address: "245-2 Kurumayacho, Nakagyo-ku, Kyoto", destType: "hotel" },
+  { id: "kyoto-3", name: "Park Hyatt Kyoto", address: "360 Kodaiji Masuyacho, Higashiyama-ku, Kyoto", destType: "hotel" },
+  { id: "tokyo-1", name: "Aman Tokyo", address: "1-5-6 Otemachi, Chiyoda-ku, Tokyo", destType: "hotel" },
+  { id: "tokyo-2", name: "Hotel Nikko Narita", address: "500 Tokome, Narita, Chiba", destType: "hotel" },
+  { id: "tokyo-3", name: "The Kahala Hotel & Resort Yokohama", address: "1-1-3 Minatomirai, Nishi-ku, Yokohama, Kanagawa", destType: "hotel" },
+  { id: "hokkaido-1", name: "Park Hyatt Niseko Hanazono", address: "328-47 Iwaobetsu, Kutchan, Hokkaido", destType: "hotel" },
+  ...staticFacilities,
+]
+
 export function DestinationScreen({ data, onUpdate, onNext, onBack }: DestinationScreenProps) {
+  const [facilities, setFacilities] = useState(mockFacilities)
+  const [loadingHotels, setLoadingHotels] = useState(true)
+
+  // Fetch real hotels from API on mount
+  useEffect(() => {
+    fetch("/api/hotels")
+      .then((res) => res.json())
+      .then((hotels: HotelType[]) => {
+        if (Array.isArray(hotels) && hotels.length > 0) {
+          const hotelFacilities = hotels.map((h) => ({
+            id: h.id,
+            name: h.name,
+            address: h.address,
+            destType: "hotel" as const,
+          }))
+          setFacilities([...hotelFacilities, ...staticFacilities])
+        }
+        // else keep mockFacilities as fallback
+      })
+      .catch(() => {
+        // keep mockFacilities on error
+      })
+      .finally(() => setLoadingHotels(false))
+  }, [])
   // --- 1. State Management ---
   const [pickupConfirmed, setPickupConfirmed] = useState(false)
   const [isChangingPickup, setIsChangingPickup] = useState(false)
@@ -107,6 +130,7 @@ export function DestinationScreen({ data, onUpdate, onNext, onBack }: Destinatio
   const handleContinue = () => {
     if (!selectedFacility) return
     onUpdate({
+      fromHotel: pickupLocation.name,
       destination: {
         name: selectedFacility.name,
         address: selectedFacility.address,
@@ -164,7 +188,7 @@ export function DestinationScreen({ data, onUpdate, onNext, onBack }: Destinatio
                 <Input autoFocus placeholder="Enter hotel name..." className="pl-9 h-12 rounded-xl border-primary" value={pickupQuery} onChange={(e) => setPickupQuery(e.target.value)} />
               </div>
               <div className="max-h-40 overflow-auto border rounded-xl bg-background shadow-inner">
-                {mockFacilities.filter(f => f.destType === "hotel" && f.name.toLowerCase().includes(pickupQuery.toLowerCase())).map(f => (
+                {facilities.filter(f => f.destType === "hotel" && f.name.toLowerCase().includes(pickupQuery.toLowerCase())).map(f => (
                   <button key={f.id} onClick={() => {setPickupLocation(f); setIsChangingPickup(false); setPickupConfirmed(true);}} className="w-full p-3 text-left hover:bg-primary/5 border-b last:border-0 text-sm font-medium">
                     {f.name}
                   </button>
@@ -183,7 +207,7 @@ export function DestinationScreen({ data, onUpdate, onNext, onBack }: Destinatio
                 <Input placeholder="Where to?" className="pl-9 h-14 rounded-2xl shadow-sm focus:ring-primary" value={searchQuery} onChange={(e) => {setSearchQuery(e.target.value); setSelectedFacility(null);}} />
                 {!selectedFacility && searchQuery && (
                   <div className="absolute top-full w-full mt-1 border rounded-xl bg-white z-30 shadow-2xl overflow-hidden">
-                    {mockFacilities.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())).map(f => (
+                    {facilities.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())).map(f => (
                       <button key={f.id} onClick={() => {setSelectedFacility(f); setSearchQuery(f.name);}} className="w-full p-4 text-left hover:bg-muted border-b last:border-0 font-bold text-sm">{f.name}</button>
                     ))}
                   </div>

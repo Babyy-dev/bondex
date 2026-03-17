@@ -7,8 +7,8 @@ export const SIZES: SizeInfo[] = [
     description: "Cabin-size suitcase / Carry-on luggage",
     maxSize: "100cm total",
     maxWeight: "10 kg",
-    price: 1500,
-    maxPrice: 1800,
+    price: 2500,
+    maxPrice: 3500,
   },
   {
     code: "M",
@@ -16,8 +16,8 @@ export const SIZES: SizeInfo[] = [
     description: "Standard suitcase / Most travelers",
     maxSize: "120cm total",
     maxWeight: "15 kg",
-    price: 2000,
-    maxPrice: 2500,
+    price: 3500,
+    maxPrice: 4500,
   },
   {
     code: "L",
@@ -25,8 +25,8 @@ export const SIZES: SizeInfo[] = [
     description: "Large suitcase / Family trips",
     maxSize: "160cm total",
     maxWeight: "20 kg",
-    price: 2800,
-    maxPrice: 3300,
+    price: 4500,
+    maxPrice: 5500,
   },
   {
     code: "LL",
@@ -34,8 +34,8 @@ export const SIZES: SizeInfo[] = [
     description: "Large or special items (golf bags, ski cases, etc.)",
     maxSize: "200cm total",
     maxWeight: "25 kg",
-    price: 3500,
-    maxPrice: 4200,
+    price: 6000,
+    maxPrice: 7000,
   },
 ];
 

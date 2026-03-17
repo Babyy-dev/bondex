@@ -8,6 +8,7 @@ import type { Order, OrderStatus } from "../hotel-staff-flow"
 import { useI18n } from "../i18n"
 import { LanguageSwitcher } from "../language-switcher"
 import { getAllBookings, type StoredBooking } from "@/lib/booking-store"
+import type { Order as ApiOrder, OrderStatus as ApiOrderStatus } from "@/types"
 
 interface OrderListScreenProps {
   onSelectOrder: (order: Order) => void
@@ -37,6 +38,34 @@ function toHotelOrder(b: StoredBooking): Order {
     status: "waiting" as OrderStatus,
     qrCode: b.orderId,
     travelerPhotos: b.items.flatMap((i) => i.photos).slice(0, 3),
+  }
+}
+
+/** Map real API OrderStatus to hotel-staff OrderStatus */
+function mapApiStatus(s: ApiOrderStatus): OrderStatus {
+  if (s === "PAID") return "waiting"
+  if (s === "CHECKED_IN" || s === "HANDED_TO_CARRIER" || s === "IN_TRANSIT" || s === "DELIVERED") return "ready"
+  if (s === "CARRIER_REFUSED") return "flagged"
+  return "waiting"
+}
+
+/** Convert real API Order to Hotel Staff Order */
+function fromApiOrder(o: ApiOrder): Order {
+  return {
+    id: o.id,
+    guestName: o.guestName,
+    itemCount: 1,
+    size: o.size,
+    checkInDate: "Today",
+    status: mapApiStatus(o.status),
+    qrCode: o.id,
+    travelerPhotos: o.photoUrls,
+    flagged: o.flagged,
+    tracking: o.trackingNumber ? {
+      carrier: o.carrier || "Yamato Transport",
+      trackingNumber: o.trackingNumber,
+      deliveryStatus: o.status === "DELIVERED" ? "delivered" : o.status === "IN_TRANSIT" ? "in-transit" : "waiting",
+    } : undefined,
   }
 }
 
@@ -73,6 +102,19 @@ export function OrderListScreen({ onSelectOrder, onScanOrder, onLogout }: OrderL
   const [reissueOrderId, setReissueOrderId] = useState<string | null>(null)
   const [reissueSuccess, setReissueSuccess] = useState<string | null>(null)
   const [liveOrders, setLiveOrders] = useState<Order[]>([])
+  const [apiOrders, setApiOrders] = useState<Order[]>([])
+
+  // Fetch real orders from API
+  const fetchApiOrders = useCallback(() => {
+    fetch("/api/orders")
+      .then((res) => res.ok ? res.json() : [])
+      .then((orders: ApiOrder[]) => {
+        if (Array.isArray(orders)) {
+          setApiOrders(orders.map(fromApiOrder))
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const loadLiveOrders = useCallback(() => {
     const bookings = getAllBookings()
@@ -80,14 +122,20 @@ export function OrderListScreen({ onSelectOrder, onScanOrder, onLogout }: OrderL
   }, [])
 
   useEffect(() => {
+    fetchApiOrders()
     loadLiveOrders()
+    // Poll API every 30 seconds
+    const interval = setInterval(fetchApiOrders, 30000)
     const handler = () => loadLiveOrders()
     window.addEventListener("bondex-booking-updated", handler)
-    return () => window.removeEventListener("bondex-booking-updated", handler)
-  }, [loadLiveOrders])
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener("bondex-booking-updated", handler)
+    }
+  }, [fetchApiOrders, loadLiveOrders])
 
-  // Merge live bookings (newest first) + mock data, deduplicate by id
-  const allOrders = [...liveOrders, ...mockOrders].filter(
+  // Merge: API orders first, then sessionStorage bookings, then mock data — deduplicate by id
+  const allOrders = [...apiOrders, ...liveOrders, ...mockOrders].filter(
     (order, idx, arr) => arr.findIndex((o) => o.id === order.id) === idx
   )
 

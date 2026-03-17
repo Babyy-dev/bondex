@@ -123,6 +123,8 @@ export function CheckInScreen({ order, onPhotoCaptured, onFlagIssue, onBack }: C
   const [showScanner, setShowScanner] = useState(false)
   const [qrVerified, setQrVerified] = useState(false)
   const [scannedId, setScannedId] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const handleQRScan = (result: string) => {
     setShowScanner(false)
@@ -142,8 +144,30 @@ export function CheckInScreen({ order, onPhotoCaptured, onFlagIssue, onBack }: C
     }, 400)
   }
 
-  const handleDone = () => {
-    if (capturedPhotos.length >= 1) onPhotoCaptured()
+  const handleDone = async () => {
+    if (capturedPhotos.length < 1) return
+    setIsSubmitting(true)
+    setSubmitError(null)
+    try {
+      const res = await fetch("/api/shipco/checkin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: order.id,
+          photoUrls: capturedPhotos,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        // Non-fatal: log but still proceed
+        console.warn("Ship&Co checkin error:", err)
+      }
+    } catch {
+      // Non-fatal: network error — still proceed for demo
+    } finally {
+      setIsSubmitting(false)
+      onPhotoCaptured()
+    }
   }
 
   const hasMinPhotos = capturedPhotos.length >= 1
@@ -271,9 +295,12 @@ export function CheckInScreen({ order, onPhotoCaptured, onFlagIssue, onBack }: C
       </div>
 
       <div className="p-4 border-t border-border bg-card space-y-2">
-        <Button onClick={handleDone} disabled={!hasMinPhotos} className="w-full h-14 text-lg">
+        {submitError && (
+          <p className="text-xs text-destructive text-center">{submitError}</p>
+        )}
+        <Button onClick={handleDone} disabled={!hasMinPhotos || isSubmitting} className="w-full h-14 text-lg">
           <Camera className="w-5 h-5 mr-2" />
-          {t("capture.recorded")}
+          {isSubmitting ? "Submitting..." : t("capture.recorded")}
         </Button>
         <button onClick={onFlagIssue} className="w-full py-3 text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-2">
           <AlertTriangle className="w-4 h-4" />

@@ -84,6 +84,8 @@ export function HotelRegisterScreen({ onBack }: HotelRegisterScreenProps) {
   })
 
   const [saved, setSaved] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const toggleSection = (key: string) => {
     setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }))
@@ -92,11 +94,57 @@ export function HotelRegisterScreen({ onBack }: HotelRegisterScreenProps) {
   const updateForm = (updates: Partial<HotelFormData>) => {
     setForm(prev => ({ ...prev, ...updates }))
     setSaved(false)
+    setSaveError(null)
   }
 
-  const handleSave = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+  const handleSave = async () => {
+    if (isSaving) return
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      const body = {
+        name: form.name,
+        branchName: form.branchName || undefined,
+        address: `${form.street}, ${form.city}, ${form.prefecture} ${form.postalCode}`,
+        addressLine1: form.street,
+        city: form.city,
+        prefecture: form.prefecture,
+        postalCode: form.postalCode,
+        status: "active" as const,
+        carrier: form.carrier,
+        cutoffTime: form.cutoffTime,
+        printerType: form.printerType,
+        labelSize: form.labelSize,
+        contactName: form.contactName,
+        contactPhone: form.phone,
+        contactEmail: form.contactEmail,
+        collectionMethod: form.pickupMethod === "hotel_drop_off" ? "drop_off" : form.pickupMethod === "on_demand" ? "on_demand" : "fixed_time",
+        sameDayDelivery: form.sameDay,
+        maxDailyItems: form.maxDailyPackages,
+        storageLocation: form.storageLocation || undefined,
+        operationalNotes: form.operationalNotes || undefined,
+        receiptStartTime: form.receivingHoursStart,
+      }
+      const res = await fetch("/api/hotels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        setSaved(true)
+        setTimeout(() => {
+          setSaved(false)
+          onBack()
+        }, 1500)
+      } else {
+        const err = await res.json().catch(() => ({}))
+        setSaveError(err.error || "Failed to register hotel. Please try again.")
+      }
+    } catch {
+      setSaveError("Network error. Please try again.")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const isValid = form.name && form.postalCode && form.prefecture && form.city && form.street && form.phone && form.contactName && form.contactEmail
@@ -468,9 +516,14 @@ export function HotelRegisterScreen({ onBack }: HotelRegisterScreenProps) {
 
       {/* Footer */}
       <div className="sticky bottom-0 bg-background border-t border-border mt-6 -mx-8 px-8 py-4 flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          This defines operational settings only. Contract terms are managed separately.
-        </p>
+        <div>
+          <p className="text-xs text-muted-foreground">
+            This defines operational settings only. Contract terms are managed separately.
+          </p>
+          {saveError && (
+            <p className="text-xs text-destructive mt-1">{saveError}</p>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
@@ -480,15 +533,15 @@ export function HotelRegisterScreen({ onBack }: HotelRegisterScreenProps) {
           </button>
           <button
             onClick={handleSave}
-            disabled={!isValid}
+            disabled={!isValid || isSaving}
             className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              isValid
+              isValid && !isSaving
                 ? "bg-foreground text-background hover:opacity-90"
                 : "bg-muted text-muted-foreground cursor-not-allowed"
             }`}
           >
             <Save className="w-4 h-4" />
-            {saved ? "Saved" : "Register hotel"}
+            {isSaving ? "Saving..." : saved ? "Saved!" : "Register hotel"}
           </button>
         </div>
       </div>

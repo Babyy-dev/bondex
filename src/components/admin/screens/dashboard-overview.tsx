@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { AlertTriangle, Package, Truck, ArrowRight, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getAllBookings, type StoredBooking } from "@/lib/booking-store"
+import type { Order as ApiOrder, OrderStatus } from "@/types"
 
 interface DashboardOverviewProps {
   onSelectOrder: (orderId: string) => void
@@ -11,7 +12,7 @@ interface DashboardOverviewProps {
   onViewOrders: (filter?: string) => void
 }
 
-// Same mock data as order-list-admin-screen for consistent counts (with actionRequired flag)
+// Mock fallback data
 const mockAllOrders = [
   { id: "BX-A1B2C3", guest: "Tanaka Yuki", status: "in-transit", items: 2, actionRequired: false, actionLabel: "" },
   { id: "BX-D4E5F6", guest: "Smith John", status: "checked-in", items: 1, actionRequired: true, actionLabel: "Payment failure" },
@@ -23,18 +24,44 @@ const mockAllOrders = [
   { id: "BX-V2W3X4", guest: "Brown David", status: "cancelled", items: 1, actionRequired: false, actionLabel: "" },
 ]
 
+const INACTIVE_STATUSES: OrderStatus[] = ["DELIVERED", "AUTO_CANCELLED", "CARRIER_REFUSED"]
+
+function mapApiOrderForDashboard(o: ApiOrder) {
+  return {
+    id: o.id,
+    guest: o.guestName,
+    status: o.status.toLowerCase().replace(/_/g, "-"),
+    items: 1,
+    actionRequired: !!o.flagged,
+    actionLabel: o.flagged ? "Flagged" : "",
+  }
+}
+
 export function DashboardOverview({ onSelectOrder, onViewPaymentFailures, onViewOrders }: DashboardOverviewProps) {
   const [liveBookings, setLiveBookings] = useState<StoredBooking[]>([])
+  const [apiOrders, setApiOrders] = useState<ReturnType<typeof mapApiOrderForDashboard>[]>([])
+
+  const fetchApiOrders = useCallback(() => {
+    fetch("/api/orders")
+      .then((res) => res.ok ? res.json() : [])
+      .then((orders: ApiOrder[]) => {
+        if (Array.isArray(orders)) {
+          setApiOrders(orders.map(mapApiOrderForDashboard))
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const load = useCallback(() => setLiveBookings(getAllBookings()), [])
   useEffect(() => {
+    fetchApiOrders()
     load()
     const h = () => load()
     window.addEventListener("bondex-booking-updated", h)
     return () => window.removeEventListener("bondex-booking-updated", h)
-  }, [load])
+  }, [fetchApiOrders, load])
 
-  const liveOrders = liveBookings.map((b) => {
+  const sessionOrders = liveBookings.map((b) => {
     const unresolvedActions = (b.messages || []).filter((m) => m.type === "action_required" && !m.readAt)
     return {
       id: b.orderId,
@@ -46,18 +73,19 @@ export function DashboardOverview({ onSelectOrder, onViewPaymentFailures, onView
     }
   })
 
-  // Merge live + mock, deduplicate
+  // Merge: API orders first, then sessionStorage, then mock — deduplicate by id
   const allOrders = [
-    ...liveOrders,
-    ...mockAllOrders.filter((o) => !liveOrders.some((l) => l.id === o.id)),
+    ...apiOrders,
+    ...sessionOrders.filter((s) => !apiOrders.some((a) => a.id === s.id)),
+    ...mockAllOrders.filter((m) => !apiOrders.some((a) => a.id === m.id) && !sessionOrders.some((s) => s.id === m.id)),
   ]
 
   // Derive all counts from actual data
   const actionRequiredCount = allOrders.filter((o) => o.actionRequired).length
-  const activeOrderCount = allOrders.filter((o) => o.status !== "delivered" && o.status !== "cancelled").length
-  const inTransitCount = allOrders.filter((o) => o.status === "in-transit").length
+  const activeOrderCount = allOrders.filter((o) => o.status !== "delivered" && o.status !== "cancelled" && o.status !== "auto-cancelled" && o.status !== "carrier-refused").length
+  const inTransitCount = allOrders.filter((o) => o.status === "in-transit" || o.status === "handed-to-carrier").length
 
-  // Recent = newest first (live bookings first, then mock, limit to 5)
+  // Recent = limit to 5
   const mergedRecentOrders = allOrders.slice(0, 5)
 
   return (

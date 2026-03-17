@@ -2,6 +2,8 @@
 
 import { useState } from "react"
 import { saveBooking, generateOrderId, type StoredBooking } from "@/lib/booking-store"
+import { getSizeInfo } from "@/lib/pricing"
+import type { DestinationType } from "@/types"
 import { LandingScreen } from "./screens/landing-screen"
 import { DestinationScreen } from "./screens/destination-screen"
 import { LuggageInputScreen } from "./screens/luggage-input-screen"
@@ -21,6 +23,7 @@ export interface BookingData {
     bookingName: string
     recipientName?: string
   }
+  fromHotel?: string          // pickup hotel name (where hotel staff is)
   deliveryDate: {
     earliest: string
     selected: string
@@ -220,7 +223,43 @@ export function TravelerFlow({ onBack, initialStep }: TravelerFlowProps) {
         <ContactInfoScreen
           data={data}
           onUpdate={(d) => setData(d)}
-          onNext={() => setStep(5)}
+          onNext={async () => {
+            // Create the order via API before proceeding to payment
+            try {
+              const size = data.items[0]?.size || "M"
+              const basePrice = data.items.reduce((sum, item) => sum + getSizeInfo(item.size).price, 0)
+              const body = {
+                size,
+                fromHotel: data.fromHotel || data.destination.name,
+                toAddress: {
+                  facilityName: data.destination.name,
+                  postalCode: "XXX-XXXX",
+                  prefecture: "",
+                  city: "",
+                  street: "",
+                  recipientName: data.destination.recipientName || data.destination.bookingName,
+                },
+                deliveryDate: data.deliveryDate.selected || data.deliveryDate.earliest,
+                guestName: data.destination.bookingName,
+                guestEmail: data.contact.email,
+                guestPhone: data.contact.phone,
+                basePrice,
+                destinationType: data.destination.type as DestinationType,
+              }
+              const res = await fetch("/api/orders", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+              })
+              if (res.ok) {
+                const order = await res.json()
+                setData((prev) => ({ ...prev, orderId: order.id }))
+              }
+            } catch {
+              // Non-fatal — payment screen will show appropriate fallback
+            }
+            setStep(5)
+          }}
           onBack={() => setStep(3)}
         />
       )}
@@ -231,7 +270,7 @@ export function TravelerFlow({ onBack, initialStep }: TravelerFlowProps) {
           data={data}
           onUpdate={(d) => setData(d)}
           onNext={() => {
-            // Save booking to sessionStorage for Hotel Staff / Admin
+            // Order already created in step 4. Save to sessionStorage for demo fallback.
             const orderId = data.orderId || generateOrderId()
             const stored: StoredBooking = {
               orderId,
@@ -258,19 +297,13 @@ export function TravelerFlow({ onBack, initialStep }: TravelerFlowProps) {
               },
               payment: {
                 method: "card",
-                amount: data.items.reduce((sum, item) => {
-                  const prices: Record<string, number> = { S: 2500, M: 3500, L: 4500, LL: 5500 }
-                  return sum + (prices[item.size] || 3500)
-                }, 0),
-                maxAmount: data.items.reduce((sum, item) => {
-                  const maxPrices: Record<string, number> = { S: 3500, M: 4500, L: 5500, LL: 6500 }
-                  return sum + (maxPrices[item.size] || 4500)
-                }, 0),
+                amount: data.items.reduce((sum, item) => sum + getSizeInfo(item.size).price, 0),
+                maxAmount: data.items.reduce((sum, item) => sum + getSizeInfo(item.size).maxPrice, 0),
               },
               messages: [],
             }
             saveBooking(stored)
-            setData((prev) => ({ ...prev, orderId }))
+            if (!data.orderId) setData((prev) => ({ ...prev, orderId }))
             setStep(6)
           }}
           onBack={() => setStep(4)}

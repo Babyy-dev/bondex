@@ -5,6 +5,7 @@ import { ArrowLeft, User, MapPin, Package, CreditCard, Camera, Edit2, Save, Aler
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getBookingById, updateBookingStatus, addMessage, ISSUE_TEMPLATES, type IssueType, type BookingMessage, type StoredBooking } from "@/lib/booking-store"
+import type { Order as ApiOrder } from "@/types"
 
 interface OrderDetailScreenProps {
   orderId: string
@@ -35,8 +36,41 @@ const fallbackOrder = {
 }
 
 export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
-  // Try to load live booking first, fall back to mock
+  const [apiOrder, setApiOrder] = useState<ApiOrder | null>(null)
+
+  // Fetch real order from API on mount
+  useEffect(() => {
+    fetch(`/api/orders/${orderId}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((order: ApiOrder | null) => {
+        if (order) setApiOrder(order)
+      })
+      .catch(() => {})
+  }, [orderId])
+
+  // Try API order first, then sessionStorage booking, then fallback mock
   const mockOrder = useMemo(() => {
+    if (apiOrder) {
+      return {
+        id: apiOrder.id,
+        guestName: apiOrder.guestName,
+        guestEmail: apiOrder.guestEmail,
+        guestPhone: apiOrder.guestPhone,
+        itemCount: 1,
+        items: [{ id: "1", size: apiOrder.size as "S" | "M" | "L" | "LL", actualSize: apiOrder.size as "S" | "M" | "L" | "LL" }],
+        status: (apiOrder.status === "PAID" || apiOrder.status === "CREATED") ? "checked-in" as const : "in-transit" as const,
+        paymentStatus: "paid" as "paid" | "failed" | "surcharge-pending",
+        hotelName: apiOrder.fromHotel,
+        hotelAddress: apiOrder.toAddress?.facilityName || "",
+        trackingNumber: apiOrder.trackingNumber || "",
+        createdAt: apiOrder.createdAt,
+        checkInDate: apiOrder.toAddress?.facilityName || "",
+        deliveryDate: apiOrder.deliveryDate,
+        evidencePhotos: apiOrder.photoUrls || [],
+        price: apiOrder.basePrice,
+        surchargePending: Math.max(0, (apiOrder.totalPrice || apiOrder.basePrice) - apiOrder.basePrice),
+      }
+    }
     const live = getBookingById(orderId)
     if (live) {
       const prices: Record<string, number> = { S: 2500, M: 3500, L: 4500, LL: 5500 }
@@ -66,10 +100,10 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
       }
     }
     return fallbackOrder
-  }, [orderId])
+  }, [orderId, apiOrder])
   const [isEditingSize, setIsEditingSize] = useState(false)
   const [isEditingTracking, setIsEditingTracking] = useState(false)
-  const [trackingNumber, setTrackingNumber] = useState(mockOrder.trackingNumber || "")
+  const [trackingNumber, setTrackingNumber] = useState("")
   const [sizeNote, setSizeNote] = useState("")
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
 
@@ -77,8 +111,21 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
   const isLiveBooking = !!getBookingById(orderId)
   const statuses: StoredBooking["status"][] = ["confirmed", "waiting", "checked_in", "picked_up", "in_transit", "delivered"]
   const statusLabels: Record<string, string> = { confirmed: "Confirmed", waiting: "Waiting", checked_in: "Checked In", picked_up: "Picked Up", in_transit: "In Transit", delivered: "Delivered" }
-  const [currentStatus, setCurrentStatus] = useState(mockOrder.status)
+  const [currentStatus, setCurrentStatus] = useState<string>(mockOrder.status)
   const [showStatusDropdown, setShowStatusDropdown] = useState(false)
+
+  // Sync state when API order loads
+  useEffect(() => {
+    if (apiOrder) {
+      if (apiOrder.trackingNumber) setTrackingNumber(apiOrder.trackingNumber)
+      setCurrentStatus(
+        apiOrder.status === "DELIVERED" ? "delivered" :
+        apiOrder.status === "IN_TRANSIT" ? "in_transit" :
+        apiOrder.status === "CHECKED_IN" ? "checked_in" :
+        apiOrder.status === "PAID" ? "waiting" : "confirmed"
+      )
+    }
+  }, [apiOrder])
 
   // Issue & messaging
   const [selectedIssue, setSelectedIssue] = useState<IssueType | "">("")
@@ -103,7 +150,19 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
     if (isLiveBooking) {
       updateBookingStatus(orderId, status)
     }
-    setCurrentStatus(status as typeof currentStatus)
+    // Also PATCH real API order
+    if (apiOrder) {
+      const apiStatusMap: Record<string, string> = {
+        confirmed: "CREATED", waiting: "PAID", checked_in: "CHECKED_IN",
+        picked_up: "IN_TRANSIT", in_transit: "IN_TRANSIT", delivered: "DELIVERED",
+      }
+      fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: apiStatusMap[status] || status.toUpperCase() }),
+      }).catch(() => {})
+    }
+    setCurrentStatus(status)
     setShowStatusDropdown(false)
   }
 
@@ -114,7 +173,7 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
     setMessageBody(template.body)
   }
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!messageTitle || !messageBody) return
     const issueType = selectedIssue || "other"
     const template = ISSUE_TEMPLATES[issueType as IssueType]
@@ -126,6 +185,12 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
         body: messageBody,
       })
     }
+    // Also persist csNote to real API
+    fetch(`/api/orders/${orderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ csNote: `[${messageTitle}] ${messageBody}` }),
+    }).catch(() => {})
     setMessageSent(true)
     setSelectedIssue("")
     setMessageTitle("")
@@ -143,6 +208,12 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
   }
 
   const handleSaveTracking = () => {
+    // Persist to real API
+    fetch(`/api/orders/${orderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trackingNumber }),
+    }).catch(() => {})
     setIsEditingTracking(false)
   }
 
