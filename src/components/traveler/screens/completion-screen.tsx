@@ -41,7 +41,7 @@ interface CompletionScreenProps {
 export function CompletionScreen({ data, onViewStatus }: CompletionScreenProps) {
   const [copied, setCopied] = useState(false)
   const orderId = data.orderId || "BX-DEMO123"
-  const pickupHotel = "Sakura Hotel Shinjuku"
+  const pickupHotel = data.fromHotel || "Hotel front desk"
   const deliveryDest = data.destination.name || "Narita Airport Terminal 1"
   const deliveryDate = data.deliveryDate.selected || "Feb 8, 2026"
   const itemCount = data.items.length || 1

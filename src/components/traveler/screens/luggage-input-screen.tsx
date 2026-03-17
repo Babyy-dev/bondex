@@ -20,7 +20,7 @@ type Size = "S" | "M" | "L" | "LL"
 
 interface LuggageItem {
   id: string
-  photos: string[] // min 1 required, max 3
+  photos: string[] // min 1 required, max 2
   size: Size | null
   estimatedWeight: string
   autoDetected: boolean
@@ -147,7 +147,7 @@ export function LuggageInputScreen({ data, onUpdate, onNext, onBack }: LuggageIn
     if (!file) return
     const url = URL.createObjectURL(file)
     const item = items.find((i) => i.id === itemId)
-    if (!item || item.photos.length >= 3) return
+    if (!item || item.photos.length >= 2) return
 
     const isFirstPhoto = item.photos.length === 0
     const newPhotos = [...item.photos, url]
@@ -194,7 +194,7 @@ export function LuggageInputScreen({ data, onUpdate, onNext, onBack }: LuggageIn
     setItems((prev) => prev.filter((i) => i.id !== id))
   }
 
-  const allItemsValid = items.every((item) => item.photos.length >= 1 && item.size !== null)
+  const allItemsValid = items.every((item) => item.size !== null)
   const canContinue = allItemsValid
 
   const handleContinue = () => {
@@ -230,7 +230,7 @@ export function LuggageInputScreen({ data, onUpdate, onNext, onBack }: LuggageIn
         <div>
           <h1 className="font-semibold text-lg text-foreground">Your luggage</h1>
           <p className="text-sm text-muted-foreground">
-            {items.length === 1 ? "Photo first, then select size." : `${items.length} items`}
+            {items.length === 1 ? "Select size. Photos are optional." : `${items.length} items`}
           </p>
         </div>
       </header>
@@ -271,13 +271,11 @@ export function LuggageInputScreen({ data, onUpdate, onNext, onBack }: LuggageIn
                     {items.length > 1 ? `Luggage ${itemIndex + 1} photos` : "Luggage photos"}
                   </h3>
                 </div>
-                {item.photos.length === 0 && (
-                  <span className="text-[10px] font-medium text-destructive">Min 1 photo</span>
-                )}
+                <span className="text-[10px] text-muted-foreground">Optional · max 2</span>
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Include handles and casters. Multiple photos OK.
+                Optional. Hotel staff will photo your luggage at check-in.
               </p>
 
               <input
@@ -302,7 +300,7 @@ export function LuggageInputScreen({ data, onUpdate, onNext, onBack }: LuggageIn
                     </button>
                   </div>
                 ))}
-                {item.photos.length < 3 && (
+                {item.photos.length < 2 && (
                   <button
                     onClick={() => handleAddPhoto(item.id)}
                     className={`w-20 h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 hover:bg-muted/50 transition-colors shrink-0 ${
@@ -310,7 +308,7 @@ export function LuggageInputScreen({ data, onUpdate, onNext, onBack }: LuggageIn
                     }`}
                   >
                     <Camera className={`w-5 h-5 ${item.photos.length === 0 ? "text-muted-foreground" : "text-muted-foreground/50"}`} />
-                    <span className="text-[10px] text-muted-foreground">{item.photos.length}/3</span>
+                    <span className="text-[10px] text-muted-foreground">{item.photos.length}/2</span>
                   </button>
                 )}
               </div>

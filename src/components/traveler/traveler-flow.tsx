@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { saveBooking, generateOrderId, type StoredBooking } from "@/lib/booking-store"
-import { getSizeInfo } from "@/lib/pricing"
+import { getSizeInfo, getDeliveryDates } from "@/lib/pricing"
 import type { DestinationType } from "@/types"
 import { LandingScreen } from "./screens/landing-screen"
 import { DestinationScreen } from "./screens/destination-screen"
@@ -77,7 +77,25 @@ export function TravelerFlow({ onBack, initialStep }: TravelerFlowProps) {
 
   // --- Step 2: Delivery Date Selection Screen (inline) ---
   const DeliveryDateScreen = () => {
+    const dates = getDeliveryDates()
+    const earliest = dates[0]
+    const toIso = (d: Date) => d.toISOString().split("T")[0]
+    const formatDisplay = (d: Date) =>
+      d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+
+    const [selectedDate, setSelectedDate] = useState<Date>(
+      () => {
+        const saved = data.deliveryDate.selected
+        if (saved) {
+          const match = dates.find((d) => toIso(d) === saved)
+          if (match) return match
+        }
+        return earliest
+      }
+    )
+
     const destName = data.destination.name || "your destination"
+    const isAirport = data.destination.type === "airport"
 
     return (
       <div className="flex-1 flex flex-col max-w-md mx-auto w-full pb-8 bg-background animate-in fade-in slide-in-from-right-4 duration-500">
@@ -107,29 +125,36 @@ export function TravelerFlow({ onBack, initialStep }: TravelerFlowProps) {
               Delivery date
             </p>
 
-            <div className="relative group">
-              <button className="w-full p-4 rounded-2xl border-2 border-primary bg-primary/5 text-left flex items-center justify-between shadow-lg shadow-primary/5 transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="font-bold text-base">Wed, Feb 18</div>
-                  <div className="px-2 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-black uppercase italic">
-                    Earliest
+            {dates.slice(0, 7).map((date, i) => {
+              const iso = toIso(date)
+              const isSelected = toIso(selectedDate) === iso
+              const isEarliest = i === 0
+              return (
+                <button
+                  key={iso}
+                  onClick={() => setSelectedDate(date)}
+                  className={`w-full p-4 rounded-2xl border-2 text-left flex items-center justify-between transition-all ${
+                    isSelected
+                      ? "border-primary bg-primary/5 shadow-lg shadow-primary/5"
+                      : "border-border bg-card hover:border-primary/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`font-bold text-base ${isSelected ? "" : "text-muted-foreground/80"}`}>
+                      {formatDisplay(date)}
+                    </div>
+                    {isEarliest && (
+                      <div className="px-2 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-black uppercase italic">
+                        Earliest
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div className="w-5 h-5 rounded-full border-2 border-primary flex items-center justify-center">
-                  <div className="w-2.5 h-2.5 rounded-full bg-primary" />
-                </div>
-              </button>
-            </div>
-
-            {["Thu, Feb 19", "Fri, Feb 20", "Sat, Feb 21"].map((date) => (
-              <button
-                key={date}
-                className="w-full p-4 rounded-2xl border border-border bg-card text-left flex items-center justify-between hover:border-primary/50 transition-colors"
-              >
-                <span className="font-bold text-base text-muted-foreground/80">{date}</span>
-                <div className="w-5 h-5 rounded-full border border-border" />
-              </button>
-            ))}
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? "border-primary" : "border-border"}`}>
+                    {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
+                  </div>
+                </button>
+              )
+            })}
           </div>
 
           {/* Logistics Promise */}
@@ -146,13 +171,15 @@ export function TravelerFlow({ onBack, initialStep }: TravelerFlowProps) {
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-muted/30 border border-dashed flex items-center gap-3">
-              <ShieldCheck className="w-5 h-5 text-muted-foreground" />
-              <p className="text-[10px] text-muted-foreground">
-                Flight time must be after <span className="font-bold text-foreground">14:00</span> on the
-                delivery date.
-              </p>
-            </div>
+            {isAirport && (
+              <div className="p-3 rounded-xl bg-muted/30 border border-dashed flex items-center gap-3">
+                <ShieldCheck className="w-5 h-5 text-muted-foreground" />
+                <p className="text-[10px] text-muted-foreground">
+                  Flight time must be after <span className="font-bold text-foreground">14:00</span> on the
+                  delivery date.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Good to know */}
@@ -175,14 +202,31 @@ export function TravelerFlow({ onBack, initialStep }: TravelerFlowProps) {
                   Hotel staff will hold your luggage safely until you arrive.
                 </p>
               </div>
+              <div className="flex gap-3">
+                <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  <span className="font-bold text-foreground block">Email updates</span>
+                  If there are any changes, you will be notified by email.
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Footer CTA */}
         <div className="p-4 bg-background border-t border-border sticky bottom-0">
-          <Button className="w-full h-14 text-lg font-bold rounded-2xl" onClick={() => setStep(3)}>
-
+          <Button
+            className="w-full h-14 text-lg font-bold rounded-2xl"
+            onClick={() => {
+              handleUpdate({
+                deliveryDate: {
+                  earliest: toIso(earliest),
+                  selected: toIso(selectedDate),
+                },
+              })
+              setStep(3)
+            }}
+          >
             Continue
           </Button>
         </div>
