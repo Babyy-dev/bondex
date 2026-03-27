@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react"
 import { ArrowLeft, CalendarDays, Zap, Clock, Plane, Building2, ShieldCheck, Bell, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { getDeliveryDates } from "@/lib/pricing"
 import type { BookingData } from "../traveler-flow"
 
 interface DeliveryDateScreenProps {
@@ -18,18 +19,8 @@ export function DeliveryDateScreen({ data, onUpdate, onNext, onBack }: DeliveryD
   const isTimeSensitive = isAirport || isDepot
 
   const { earliestDate, availableDates } = useMemo(() => {
-    const today = new Date()
-    const earliest = new Date(today)
-    earliest.setDate(earliest.getDate() + 2)
-    
-    const dates: Date[] = []
-    for (let i = 0; i <= 14; i++) {
-      const date = new Date(earliest)
-      date.setDate(earliest.getDate() + i)
-      dates.push(date)
-    }
-    
-    return { earliestDate: earliest, availableDates: dates }
+    const dates = getDeliveryDates()
+    return { earliestDate: dates[0], availableDates: dates }
   }, [])
 
   const [selectedDate, setSelectedDate] = useState<Date>(

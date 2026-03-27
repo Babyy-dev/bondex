@@ -125,6 +125,7 @@ export function CheckInScreen({ order, onPhotoCaptured, onFlagIssue, onBack }: C
   const [scannedId, setScannedId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleQRScan = (result: string) => {
     setShowScanner(false)
@@ -137,11 +138,23 @@ export function CheckInScreen({ order, onPhotoCaptured, onFlagIssue, onBack }: C
   }
 
   const handleCapture = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
     setIsCapturing(true)
-    setTimeout(() => {
-      setCapturedPhotos(prev => [...prev, `/placeholder.svg?capture-${prev.length + 1}-${Date.now()}`])
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string
+      if (dataUrl) setCapturedPhotos(prev => [...prev, dataUrl])
       setIsCapturing(false)
-    }, 400)
+    }
+    reader.onerror = () => setIsCapturing(false)
+    reader.readAsDataURL(file)
+    // Reset so same file can be selected again
+    e.target.value = ""
   }
 
   const handleDone = async () => {
@@ -186,6 +199,17 @@ export function CheckInScreen({ order, onPhotoCaptured, onFlagIssue, onBack }: C
       </header>
 
       {showScanner && <QRScanner onScan={handleQRScan} onClose={() => setShowScanner(false)} />}
+
+      {/* Hidden camera input — opens device camera on mobile */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleFileChange}
+        className="hidden"
+        aria-hidden="true"
+      />
 
       <div className="flex-1 overflow-auto p-4 space-y-4">
         {/* QR verification: scan prompt or verified badge */}

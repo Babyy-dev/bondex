@@ -104,9 +104,18 @@ export function OrderListScreen({ onSelectOrder, onScanOrder, onLogout }: OrderL
   const [liveOrders, setLiveOrders] = useState<Order[]>([])
   const [apiOrders, setApiOrders] = useState<Order[]>([])
 
-  // Fetch real orders from API
+  // Read hotel session info
+  const hotelSession = (() => {
+    if (typeof window === "undefined") return { hotelCode: "", hotelName: "" }
+    try { return JSON.parse(sessionStorage.getItem("bondex_hotel_session") || "{}") } catch { return {} }
+  })()
+  const hotelCode: string = hotelSession.hotelCode || ""
+  const hotelName: string = hotelSession.hotelName || hotelCode
+
+  // Fetch real orders from API — filtered to this hotel
   const fetchApiOrders = useCallback(() => {
-    fetch("/api/orders")
+    const url = hotelCode ? `/api/orders?hotelId=${encodeURIComponent(hotelCode)}` : "/api/orders"
+    fetch(url)
       .then((res) => res.ok ? res.json() : [])
       .then((orders: ApiOrder[]) => {
         if (Array.isArray(orders)) {
@@ -114,7 +123,7 @@ export function OrderListScreen({ onSelectOrder, onScanOrder, onLogout }: OrderL
         }
       })
       .catch(() => {})
-  }, [])
+  }, [hotelCode])
 
   const loadLiveOrders = useCallback(() => {
     const bookings = getAllBookings()
@@ -134,8 +143,8 @@ export function OrderListScreen({ onSelectOrder, onScanOrder, onLogout }: OrderL
     }
   }, [fetchApiOrders, loadLiveOrders])
 
-  // Merge: API orders first, then sessionStorage bookings, then mock data — deduplicate by id
-  const allOrders = [...apiOrders, ...liveOrders, ...mockOrders].filter(
+  // Real data only: API orders first, then any sessionStorage orders not yet in DB
+  const allOrders = [...apiOrders, ...liveOrders].filter(
     (order, idx, arr) => arr.findIndex((o) => o.id === order.id) === idx
   )
 
@@ -189,7 +198,7 @@ export function OrderListScreen({ onSelectOrder, onScanOrder, onLogout }: OrderL
         <div className="flex items-center justify-between mb-1">
           <div>
             <h1 className="font-semibold text-lg text-foreground">{t("header.title")}</h1>
-            <p className="text-sm text-muted-foreground">Park Hyatt Tokyo - Shinjuku</p>
+            {hotelName && <p className="text-sm text-muted-foreground">{hotelName}</p>}
           </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />

@@ -29,8 +29,16 @@ export async function POST(req: NextRequest) {
       const pi = event.data.object as Stripe.PaymentIntent;
       const orderId = pi.metadata?.orderId;
       if (orderId) {
-        await updateOrder(orderId, { status: "PAID", paymentIntentId: pi.id });
-        console.log(`Order ${orderId} marked as PAID`);
+        // Idempotency guard: only update if not already PAID (handles Stripe retries)
+        const existing = await getOrder(orderId);
+        if (!existing) {
+          console.warn(`Webhook: order ${orderId} not found`);
+        } else if (existing.status === "PAID") {
+          console.log(`Order ${orderId} already PAID — skipping duplicate webhook`);
+        } else {
+          await updateOrder(orderId, { status: "PAID", paymentIntentId: pi.id });
+          console.log(`Order ${orderId} marked as PAID`);
+        }
       }
       break;
     }
@@ -40,6 +48,7 @@ export async function POST(req: NextRequest) {
       const orderId = pi.metadata?.orderId;
       if (orderId) {
         console.warn(`Payment failed for order ${orderId} – CS to handle`);
+        await updateOrder(orderId, { paymentFailed: true });
         const order = await getOrder(orderId);
         if (order) {
           sendPaymentFailed(order).catch((err) =>
@@ -75,11 +84,14 @@ export async function POST(req: NextRequest) {
 
     case "charge.refunded": {
       const charge = event.data.object as Stripe.Charge;
-      const orderId = (charge.metadata as Record<string, string>)?.orderId
+      const metadata = charge.metadata ?? {};
+      const orderId = metadata.orderId
         ?? (charge.payment_intent as Stripe.PaymentIntent | null)?.metadata?.orderId;
       if (orderId) {
         await updateOrder(orderId, { flagged: true });
         console.log(`Order ${orderId} flagged – charge refunded (chargeId: ${charge.id})`);
+      } else {
+        console.warn(`charge.refunded: no orderId in metadata (chargeId: ${charge.id})`);
       }
       break;
     }

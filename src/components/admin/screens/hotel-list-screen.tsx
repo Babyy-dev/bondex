@@ -6,6 +6,7 @@ import type { Hotel } from "@/types"
 
 interface HotelListScreenProps {
   onAddHotel: () => void
+  onSelectHotel: (hotelId: string) => void
   onBack: () => void
 }
 
@@ -17,19 +18,18 @@ const mockHotels: Hotel[] = [
   { id: "h5", name: "Sakura Hotel Shinjuku", branchName: "Main", address: "Tokyo", status: "paused", dailyOrderCount: 0, carrier: "yamato", cutoffTime: "15:00", printerType: "none", labelSize: "62mm" },
 ]
 
-export function HotelListScreen({ onAddHotel }: HotelListScreenProps) {
+export function HotelListScreen({ onAddHotel, onSelectHotel }: HotelListScreenProps) {
   const [search, setSearch] = useState("")
-  const [hotels, setHotels] = useState<Hotel[]>(mockHotels)
+  const [hotels, setHotels] = useState<Hotel[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch("/api/hotels")
       .then((res) => res.ok ? res.json() : [])
       .then((data: Hotel[]) => {
-        if (Array.isArray(data) && data.length > 0) setHotels(data)
-        // else keep mockHotels as fallback
+        if (Array.isArray(data)) setHotels(data)
       })
-      .catch(() => {/* keep mockHotels */})
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
@@ -74,6 +74,7 @@ export function HotelListScreen({ onAddHotel }: HotelListScreenProps) {
         {filtered.map((hotel) => (
           <div
             key={hotel.id}
+            onClick={() => onSelectHotel(hotel.id)}
             className="flex items-center justify-between p-4 bg-card rounded-lg border border-border hover:bg-muted/50 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-4">

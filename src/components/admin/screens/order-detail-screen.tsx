@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback } from "react"
-import { ArrowLeft, User, MapPin, Package, CreditCard, Camera, Edit2, Save, AlertTriangle, Truck, Send, MessageSquare, Bell, ChevronDown, Clock } from "lucide-react"
+import { ArrowLeft, User, MapPin, Package, CreditCard, Camera, Edit2, Save, AlertTriangle, Truck, Send, MessageSquare, Bell, ChevronDown, Clock, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getBookingById, updateBookingStatus, addMessage, ISSUE_TEMPLATES, type IssueType, type BookingMessage, type StoredBooking } from "@/lib/booking-store"
@@ -33,6 +33,7 @@ const fallbackOrder = {
   evidencePhotos: ["photo1", "photo2"],
   price: 7000,
   surchargePending: 1000,
+  labelUrl: "",
 }
 
 export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
@@ -61,14 +62,15 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
         status: (apiOrder.status === "PAID" || apiOrder.status === "CREATED") ? "checked-in" as const : "in-transit" as const,
         paymentStatus: "paid" as "paid" | "failed" | "surcharge-pending",
         hotelName: apiOrder.fromHotel,
-        hotelAddress: apiOrder.toAddress?.facilityName || "",
+        hotelAddress: [apiOrder.toAddress?.facilityName, apiOrder.toAddress?.city, apiOrder.toAddress?.prefecture].filter(Boolean).join(", "),
         trackingNumber: apiOrder.trackingNumber || "",
         createdAt: apiOrder.createdAt,
-        checkInDate: apiOrder.toAddress?.facilityName || "",
+        checkInDate: apiOrder.checkedInAt ? new Date(apiOrder.checkedInAt).toLocaleDateString("ja-JP") : apiOrder.toAddress?.facilityName || "",
         deliveryDate: apiOrder.deliveryDate,
         evidencePhotos: apiOrder.photoUrls || [],
         price: apiOrder.basePrice,
         surchargePending: Math.max(0, (apiOrder.totalPrice || apiOrder.basePrice) - apiOrder.basePrice),
+        labelUrl: apiOrder.labelUrl || "",
       }
     }
     const live = getBookingById(orderId)
@@ -97,20 +99,23 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
         evidencePhotos: live.items.flatMap((i) => i.photos),
         price: basePrice,
         surchargePending: 0,
+        labelUrl: "",
       }
     }
     return fallbackOrder
   }, [orderId, apiOrder])
+  const [newSize, setNewSize] = useState<string>("")
   const [isEditingSize, setIsEditingSize] = useState(false)
   const [isEditingTracking, setIsEditingTracking] = useState(false)
   const [trackingNumber, setTrackingNumber] = useState("")
   const [sizeNote, setSizeNote] = useState("")
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
+  const [showSlipModal, setShowSlipModal] = useState(false)
 
   // Status change
   const isLiveBooking = !!getBookingById(orderId)
-  const statuses: StoredBooking["status"][] = ["confirmed", "waiting", "checked_in", "picked_up", "in_transit", "delivered"]
-  const statusLabels: Record<string, string> = { confirmed: "Confirmed", waiting: "Waiting", checked_in: "Checked In", picked_up: "Picked Up", in_transit: "In Transit", delivered: "Delivered" }
+  const statuses: StoredBooking["status"][] = ["confirmed", "waiting", "checked_in", "picked_up", "in_transit", "delivered", "carrier_refused", "auto_cancelled"]
+  const statusLabels: Record<string, string> = { confirmed: "Confirmed", waiting: "Waiting", checked_in: "Checked In", picked_up: "Picked Up", in_transit: "In Transit", delivered: "Delivered", carrier_refused: "Carrier Refused", auto_cancelled: "Auto Cancelled" }
   const [currentStatus, setCurrentStatus] = useState<string>(mockOrder.status)
   const [showStatusDropdown, setShowStatusDropdown] = useState(false)
 
@@ -121,8 +126,11 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
       setCurrentStatus(
         apiOrder.status === "DELIVERED" ? "delivered" :
         apiOrder.status === "IN_TRANSIT" ? "in_transit" :
+        apiOrder.status === "HANDED_TO_CARRIER" ? "picked_up" :
         apiOrder.status === "CHECKED_IN" ? "checked_in" :
-        apiOrder.status === "PAID" ? "waiting" : "confirmed"
+        apiOrder.status === "PAID" ? "waiting" :
+        apiOrder.status === "CARRIER_REFUSED" ? "carrier_refused" :
+        apiOrder.status === "AUTO_CANCELLED" ? "auto_cancelled" : "confirmed"
       )
     }
   }, [apiOrder])
@@ -155,6 +163,7 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
       const apiStatusMap: Record<string, string> = {
         confirmed: "CREATED", waiting: "PAID", checked_in: "CHECKED_IN",
         picked_up: "IN_TRANSIT", in_transit: "IN_TRANSIT", delivered: "DELIVERED",
+        carrier_refused: "CARRIER_REFUSED", auto_cancelled: "AUTO_CANCELLED",
       }
       fetch(`/api/orders/${orderId}`, {
         method: "PATCH",
@@ -198,13 +207,45 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
     setTimeout(() => setMessageSent(false), 3000)
   }
 
-  const handleSaveSize = () => {
+  const handleSaveSize = async () => {
     if (!sizeNote) {
       alert("Evidence note required for size change")
       return
     }
+    if (!newSize) {
+      alert("Select the new size")
+      return
+    }
+    // Call charge-difference API to bill surcharge off-session
+    try {
+      const res = await fetch("/api/stripe/charge-difference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, newSize, note: sizeNote }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        alert(json.error || "Failed to process size change")
+        return
+      }
+    } catch {
+      alert("Network error processing size change")
+      return
+    }
+    // Also PATCH order with new size + CS note
+    fetch(`/api/orders/${orderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ size: newSize, csNote: `Size adjusted: ${sizeNote}` }),
+    }).catch(() => {})
     setIsEditingSize(false)
+    setNewSize("")
     setSizeNote("")
+    // Refresh order data
+    fetch(`/api/orders/${orderId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((o) => { if (o) setApiOrder(o) })
+      .catch(() => {})
   }
 
   const handleSaveTracking = () => {
@@ -221,16 +262,26 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
     <div className="p-6 lg:p-8 max-w-4xl">
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
-        <button 
+        <button
           onClick={onBack}
           className="p-2 -ml-2 rounded-lg hover:bg-muted transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-foreground font-mono">{orderId}</h1>
           <p className="text-muted-foreground">Order details</p>
         </div>
+        <Button variant="outline" size="sm" onClick={() => setShowSlipModal(true)}>
+          <Printer className="w-4 h-4 mr-2" />
+          Print slip
+        </Button>
+        {mockOrder.labelUrl && (
+          <Button variant="outline" size="sm" onClick={() => window.open(mockOrder.labelUrl, "_blank")}>
+            <Printer className="w-4 h-4 mr-2" />
+            Print label
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -388,17 +439,31 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
             </div>
 
             {isEditingSize && (
-              <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border">
-                <label className="text-sm font-medium text-foreground mb-2 block">
-                  Evidence note (required)
-                </label>
-                <Input
-                  placeholder="Describe the size discrepancy..."
-                  value={sizeNote}
-                  onChange={(e) => setSizeNote(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground mt-2">
-                  Size change triggers automatic off-session surcharge
+              <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border space-y-3">
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">New size (carrier measured)</label>
+                  <div className="flex gap-2">
+                    {(["S", "M", "L", "LL"] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setNewSize(s)}
+                        className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${newSize === s ? "border-foreground bg-foreground text-background" : "border-border hover:border-foreground/50"}`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Evidence note (required)</label>
+                  <Input
+                    placeholder="Describe the size discrepancy..."
+                    value={sizeNote}
+                    onChange={(e) => setSizeNote(e.target.value)}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Size change triggers automatic off-session surcharge via Stripe
                 </p>
               </div>
             )}
@@ -449,13 +514,18 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
               Evidence photos
             </h3>
             <div className="grid grid-cols-3 gap-2">
-              {mockOrder.evidencePhotos.map((photo) => (
+              {mockOrder.evidencePhotos.map((photo, idx) => (
                 <button
-                  key={photo}
+                  key={idx}
                   onClick={() => setSelectedPhoto(photo)}
-                  className="aspect-square rounded-lg bg-muted border border-border flex items-center justify-center hover:border-foreground transition-colors"
+                  className="aspect-square rounded-lg bg-muted border border-border overflow-hidden hover:border-foreground transition-colors"
                 >
-                  <Camera className="w-6 h-6 text-muted-foreground" />
+                  <img
+                    src={photo}
+                    alt={`Evidence ${idx + 1}`}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
+                  />
                 </button>
               ))}
               {mockOrder.evidencePhotos.length === 0 && (
@@ -596,16 +666,66 @@ export function OrderDetailScreen({ orderId, onBack }: OrderDetailScreenProps) {
         </div>
       </div>
 
+      {/* Handwritten slip modal (printer fallback) */}
+      {showSlipModal && (
+        <div className="fixed inset-0 bg-foreground/80 flex items-center justify-center z-50" onClick={() => setShowSlipModal(false)}>
+          <div
+            className="bg-card rounded-lg max-w-lg w-full mx-4 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h2 className="font-semibold text-foreground flex items-center gap-2">
+                <Printer className="w-5 h-5" />
+                Handwritten Slip — Printer Fallback
+              </h2>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => window.print()}>Print</Button>
+                <Button size="sm" variant="outline" onClick={() => setShowSlipModal(false)}>Close</Button>
+              </div>
+            </div>
+            <div id="print-slip" className="p-6 space-y-4 text-sm font-mono">
+              <div className="text-center border-b pb-4 mb-4">
+                <p className="text-xl font-bold">BondEx — 配送伝票</p>
+                <p className="text-xs text-muted-foreground">Handwritten Slip / 手書き伝票</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><p className="text-xs text-muted-foreground">Order ID / 注文ID</p><p className="font-bold">{mockOrder.id}</p></div>
+                <div><p className="text-xs text-muted-foreground">Date / 日付</p><p>{new Date().toLocaleDateString("ja-JP")}</p></div>
+                <div><p className="text-xs text-muted-foreground">Guest / ゲスト</p><p>{mockOrder.guestName}</p></div>
+                <div><p className="text-xs text-muted-foreground">Phone / 電話</p><p>{mockOrder.guestPhone}</p></div>
+                <div><p className="text-xs text-muted-foreground">From / 発送元</p><p>{mockOrder.hotelName}</p></div>
+                <div><p className="text-xs text-muted-foreground">Delivery / 配達日</p><p>{mockOrder.deliveryDate}</p></div>
+                <div className="col-span-2"><p className="text-xs text-muted-foreground">To / 配達先</p><p>{mockOrder.hotelAddress}</p></div>
+                <div><p className="text-xs text-muted-foreground">Size / サイズ</p><p className="font-bold">{mockOrder.items.map(i => i.size).join(", ")}</p></div>
+                <div><p className="text-xs text-muted-foreground">Items / 個数</p><p>{mockOrder.itemCount}</p></div>
+              </div>
+              {mockOrder.trackingNumber && (
+                <div className="border-t pt-4"><p className="text-xs text-muted-foreground">Tracking / 追跡番号</p><p className="font-bold">{mockOrder.trackingNumber}</p></div>
+              )}
+              <div className="border-t pt-4 grid grid-cols-2 gap-4 text-xs text-muted-foreground">
+                <div><p>Staff signature / スタッフ署名</p><div className="h-8 border-b border-dashed border-muted-foreground mt-2" /></div>
+                <div><p>Guest signature / ゲスト署名</p><div className="h-8 border-b border-dashed border-muted-foreground mt-2" /></div>
+              </div>
+              <p className="text-[10px] text-center text-muted-foreground border-t pt-3">
+                BondEx – Japan Luggage Delivery | Use this slip when printer is unavailable
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Photo viewer modal */}
       {selectedPhoto && (
-        <div 
+        <div
           className="fixed inset-0 bg-foreground/80 flex items-center justify-center z-50"
           onClick={() => setSelectedPhoto(null)}
         >
           <div className="bg-card p-4 rounded-lg max-w-2xl w-full mx-4">
-            <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
-              <Camera className="w-16 h-16 text-muted-foreground" />
-            </div>
+            <img
+              src={selectedPhoto}
+              alt="Evidence photo"
+              className="w-full rounded-lg object-contain max-h-[70vh]"
+            />
             <p className="text-center text-sm text-muted-foreground mt-4">
               Click anywhere to close
             </p>

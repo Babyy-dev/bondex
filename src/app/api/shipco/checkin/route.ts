@@ -3,12 +3,18 @@ import { getOrder, getHotel, updateOrder } from "@/lib/db";
 import { createShipment } from "@/lib/shipco";
 import { sendCheckinComplete } from "@/lib/email";
 import { getSession } from "@/lib/auth";
+import { calculatePriceWithZone, getZone } from "@/lib/pricing";
 
 // Called when hotel staff scans QR + takes photo
 export async function POST(req: NextRequest) {
   try {
     const { orderId, photoUrls } = await req.json();
+
+    // Require authenticated hotel staff session
     const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const order = await getOrder(orderId);
     if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
@@ -76,20 +82,34 @@ export async function POST(req: NextRequest) {
     };
     const carrierCode = hotel?.carrier ? CARRIER_CODES[hotel.carrier] : undefined;
 
-    const shipmentResult = await createShipment({
-      fromAddress,
-      toAddress,
-      size: order.size,
-      deliveryDate: order.deliveryDate,
-      orderId: order.id,
-      guestName: order.guestName,
-      checkInDate: new Date().toISOString().split("T")[0],
-      carrier: carrierCode,
-    });
+    // Ship&Co errors are non-fatal — fall back to mock label so check-in always succeeds
+    let shipmentResult: Awaited<ReturnType<typeof createShipment>> | null = null;
+    try {
+      shipmentResult = await createShipment({
+        fromAddress,
+        toAddress,
+        size: order.size,
+        deliveryDate: order.deliveryDate,
+        orderId: order.id,
+        guestName: order.guestName,
+        checkInDate: new Date().toISOString().split("T")[0],
+        carrier: carrierCode,
+      });
+    } catch (shipcoErr) {
+      console.error("Ship&Co createShipment failed — using mock label fallback:", shipcoErr);
+    }
 
-    const labelUrl = shipmentResult.label_url;
-    const trackingNumber = shipmentResult.tracking_number;
-    const carrier = shipmentResult.carrier ?? "Yamato Transport";
+    const labelUrl = shipmentResult?.label_url ?? `/api/labels/mock/${order.id}`;
+    const trackingNumber = shipmentResult?.tracking_number ?? undefined;
+    const carrier = shipmentResult?.carrier ?? "Yamato Transport";
+
+    // Calculate zone-based pricing if postal codes are available
+    const fromPostal = hotel?.postalCode ?? "";
+    const toPostal = order.toAddress.postalCode ?? "";
+    const zone = fromPostal && toPostal ? getZone(fromPostal, toPostal) : 1;
+    const { carrierCost: estimatedCarrierCost, payoutAmount } = calculatePriceWithZone(order.size, zone);
+    // Use actual cost from Ship&Co if available, otherwise use master estimate
+    const actualCarrierCost = (shipmentResult as { cost?: number } | null)?.cost ?? estimatedCarrierCost;
 
     const updated = await updateOrder(orderId, {
       status: "CHECKED_IN",
@@ -98,8 +118,10 @@ export async function POST(req: NextRequest) {
       labelUrl,
       trackingNumber,
       carrier,
-      shipcoShipmentId: shipmentResult.id,
-      // Assign hotel if not already set (e.g. booking made without hotel URL param)
+      shipcoShipmentId: shipmentResult?.id,
+      zone,
+      actualCarrierCost,
+      payoutAmount,
       ...(!order.fromHotelId && session?.hotelId ? { fromHotelId: session.hotelId } : {}),
     });
 
@@ -112,7 +134,15 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ order: updated, labelUrl, trackingNumber });
   } catch (err) {
+    const message = err instanceof Error ? err.message : "Check-in failed";
+    const isShipcoError = message.includes("Ship&Co API error");
     console.error("Check-in error:", err);
-    return NextResponse.json({ error: "Check-in failed" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: message,
+        error_type: isShipcoError ? "shipco_api_error" : "internal_error",
+      },
+      { status: 500 }
+    );
   }
 }

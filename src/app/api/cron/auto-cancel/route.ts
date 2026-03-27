@@ -15,8 +15,16 @@ export async function GET(req: NextRequest) {
 
   for (const order of orders) {
     if (order.status !== "PAID") continue;
-    // Deadline: deliveryDate at 22:00 JST = deliveryDate at 13:00 UTC
-    const [y, m, d] = order.deliveryDate.split("-").map(Number);
+
+    // Deadline: deliveryDate at 22:00 JST.
+    // Japan (JST = UTC+9) has NO daylight saving time, so the offset is always fixed:
+    // 22:00 JST = 13:00 UTC — this calculation is always correct for Japan.
+    const parts = order.deliveryDate?.split("-").map(Number);
+    if (!parts || parts.length !== 3 || parts.some(isNaN)) {
+      console.warn(`[auto-cancel] Skipping ${order.id}: invalid deliveryDate "${order.deliveryDate}"`);
+      continue;
+    }
+    const [y, m, d] = parts;
     const deadlineUtc = Date.UTC(y, m - 1, d, 13, 0, 0); // 22:00 JST = 13:00 UTC
     if (nowUtc > deadlineUtc) {
       const updated = await updateOrder(order.id, { status: "AUTO_CANCELLED" });

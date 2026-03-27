@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect } from "react"
 import {
   ArrowLeft, MapPin, Search, User, AlertTriangle,
   ArrowRight, CheckCircle2, X, Clock,
-  Calendar, PlaneTakeoff, Hotel, ShieldCheck, AlertCircle, Upload, FileText
+  Calendar, PlaneTakeoff, Hotel, ShieldCheck, AlertCircle, Upload, FileText, Building2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,6 +16,23 @@ interface DestinationScreenProps {
   onUpdate: (data: Partial<BookingData>) => void
   onNext: () => void
   onBack: () => void
+}
+
+// Zipcloud postal code lookup (free JP API — https://zipcloud.ibsnet.co.jp)
+async function lookupPostalCode(postal: string): Promise<{ prefecture: string; city: string } | null> {
+  const clean = postal.replace(/[^0-9]/g, "")
+  if (clean.length !== 7) return null
+  try {
+    const res = await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${clean}`)
+    const data = await res.json()
+    if (data.results && data.results[0]) {
+      return {
+        prefecture: data.results[0].address1,
+        city: data.results[0].address2 + data.results[0].address3,
+      }
+    }
+  } catch {}
+  return null
 }
 
 // 初期値としての配送元（QRスキャン想定）
@@ -56,6 +73,7 @@ export function DestinationScreen({ data, onUpdate, onNext, onBack }: Destinatio
           const hotelFacilities = hotels.map((h) => ({
             id: h.id,
             name: h.name,
+            branchName: h.branchName,
             address: h.address,
             destType: "hotel" as const,
           }))
@@ -75,6 +93,7 @@ export function DestinationScreen({ data, onUpdate, onNext, onBack }: Destinatio
   const [pickupQuery, setPickupQuery] = useState("")
 
   const [selectedFacility, setSelectedFacility] = useState<any>(null)
+  const [showDisambiguation, setShowDisambiguation] = useState(false)
   const [searchQuery, setSearchQuery] = useState(data.destination.name || "")
   const [arrivalDate, setArrivalDate] = useState(data.destination.checkInDate || "")
   const [arrivalTime, setArrivalTime] = useState("") 
@@ -86,6 +105,13 @@ export function DestinationScreen({ data, onUpdate, onNext, onBack }: Destinatio
   const [flightNumber, setFlightNumber] = useState("")
 
   const isAirport = selectedFacility?.destType === "airport"
+
+  const disambiguationOptions = useMemo(() => {
+    if (!selectedFacility) return []
+    return facilities.filter(
+      (f) => f.name.toLowerCase() === selectedFacility.name.toLowerCase() && f.id !== selectedFacility.id
+    )
+  }, [selectedFacility, facilities])
 
   // --- 2. Logistics Logic (ヤマト運輸 空港宅急便規約準拠) ---
   const logisticsStatus = useMemo(() => {
@@ -129,12 +155,20 @@ export function DestinationScreen({ data, onUpdate, onNext, onBack }: Destinatio
   // --- 4. Action Handlers ---
   const handleContinue = () => {
     if (!selectedFacility) return
+    if (disambiguationOptions.length > 0) {
+      setShowDisambiguation(true)
+      return
+    }
+    proceedWithFacility(selectedFacility)
+  }
+
+  const proceedWithFacility = (facility: any) => {
     onUpdate({
       fromHotel: pickupLocation.name,
       destination: {
-        name: selectedFacility.name,
-        address: selectedFacility.address,
-        type: selectedFacility.destType,
+        name: facility.name,
+        address: facility.address,
+        type: facility.destType,
         checkInDate: arrivalDate,
         bookingName: bookingName,
         recipientName: effectiveRecipient
@@ -353,14 +387,57 @@ export function DestinationScreen({ data, onUpdate, onNext, onBack }: Destinatio
 
       {/* Footer CTA */}
       <div className="p-4 bg-white border-t border-border mt-auto">
-        <Button 
+        <Button
           className="w-full h-14 text-lg font-bold rounded-2xl shadow-xl transition-all shadow-primary/20"
-          disabled={!canContinue} 
+          disabled={!canContinue}
           onClick={handleContinue}
         >
           {logisticsStatus?.error ? "Schedule Error" : "Confirm & Save Time"}
         </Button>
       </div>
+
+      {/* Disambiguation Modal */}
+      {showDisambiguation && selectedFacility && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-background rounded-t-2xl p-6 animate-in slide-in-from-bottom-4 duration-300">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-primary" />
+                <h2 className="font-bold text-foreground">Multiple Locations Found</h2>
+              </div>
+              <button
+                onClick={() => setShowDisambiguation(false)}
+                className="p-1.5 rounded-full hover:bg-muted transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              There are multiple locations for <strong className="text-foreground">{selectedFacility.name}</strong>. Please select the correct one:
+            </p>
+            <div className="space-y-2">
+              {[selectedFacility, ...disambiguationOptions].map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => {
+                    setSelectedFacility(f)
+                    setSearchQuery(f.name)
+                    setShowDisambiguation(false)
+                    proceedWithFacility(f)
+                  }}
+                  className="w-full text-left p-4 rounded-xl border border-border hover:border-primary hover:bg-primary/5 transition-all"
+                >
+                  <p className="font-bold text-sm text-foreground">
+                    {f.name}{f.branchName ? ` — ${f.branchName}` : ""}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{f.address}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

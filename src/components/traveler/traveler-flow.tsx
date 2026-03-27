@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { saveBooking, generateOrderId, type StoredBooking } from "@/lib/booking-store"
 import { getSizeInfo, getDeliveryDates } from "@/lib/pricing"
 import type { DestinationType } from "@/types"
@@ -24,6 +24,7 @@ export interface BookingData {
     recipientName?: string
   }
   fromHotel?: string          // pickup hotel name (where hotel staff is)
+  fromHotelId?: string        // pickup hotel ID (from QR code param)
   deliveryDate: {
     earliest: string
     selected: string
@@ -46,6 +47,7 @@ export interface BookingData {
 interface TravelerFlowProps {
   onBack?: () => void
   initialStep?: string | null
+  initialHotelId?: string | null
 }
 
 const STEP_MAP: Record<string, number> = {
@@ -59,7 +61,7 @@ const STEP_MAP: Record<string, number> = {
   status: 7,
 }
 
-export function TravelerFlow({ onBack, initialStep }: TravelerFlowProps) {
+export function TravelerFlow({ onBack, initialStep, initialHotelId }: TravelerFlowProps) {
   const [step, setStep] = useState(() => {
     if (initialStep && initialStep in STEP_MAP) return STEP_MAP[initialStep]
     return 0
@@ -70,6 +72,22 @@ export function TravelerFlow({ onBack, initialStep }: TravelerFlowProps) {
     items: [],
     contact: { email: "", phone: "" },
   })
+
+  useEffect(() => {
+    if (!initialHotelId) return
+    fetch(`/api/hotels/${initialHotelId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((hotel) => {
+        if (hotel) {
+          setData((prev) => ({
+            ...prev,
+            fromHotel: hotel.name + (hotel.branchName ? ` ${hotel.branchName}` : ""),
+            fromHotelId: hotel.id,
+          }))
+        }
+      })
+      .catch(() => {})
+  }, [initialHotelId])
 
   const handleUpdate = (updates: Partial<BookingData>) => {
     setData((prev) => ({ ...prev, ...updates }))
@@ -267,7 +285,9 @@ export function TravelerFlow({ onBack, initialStep }: TravelerFlowProps) {
         <ContactInfoScreen
           data={data}
           onUpdate={(d) => setData(d)}
-          onNext={async () => {
+          onNext={async (contact) => {
+            // Use contact param directly — avoids React stale-state closure bug
+            setData((prev) => ({ ...prev, contact }))
             // Create the order via API before proceeding to payment
             try {
               const size = data.items[0]?.size || "M"
@@ -275,18 +295,19 @@ export function TravelerFlow({ onBack, initialStep }: TravelerFlowProps) {
               const body = {
                 size,
                 fromHotel: data.fromHotel || data.destination.name,
+                fromHotelId: data.fromHotelId,
                 toAddress: {
                   facilityName: data.destination.name,
-                  postalCode: "XXX-XXXX",
+                  postalCode: "",
                   prefecture: "",
                   city: "",
-                  street: "",
-                  recipientName: data.destination.recipientName || data.destination.bookingName,
+                  street: data.destination.address,
+                  recipientName: (data.destination as { recipientName?: string }).recipientName || data.destination.bookingName,
                 },
                 deliveryDate: data.deliveryDate.selected || data.deliveryDate.earliest,
                 guestName: data.destination.bookingName,
-                guestEmail: data.contact.email,
-                guestPhone: data.contact.phone,
+                guestEmail: contact.email,
+                guestPhone: contact.phone,
                 basePrice,
                 destinationType: data.destination.type as DestinationType,
               }

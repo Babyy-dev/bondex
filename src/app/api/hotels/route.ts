@@ -9,6 +9,14 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
+    if (!body.name || typeof body.name !== "string") {
+      return NextResponse.json({ error: "Hotel name is required" }, { status: 422 });
+    }
+    if (body.carrier && !["yamato", "sagawa"].includes(body.carrier)) {
+      return NextResponse.json({ error: "carrier must be 'yamato' or 'sagawa'" }, { status: 422 });
+    }
+
     const hotel: Hotel = {
       id: `HTL-${Date.now().toString(36).toUpperCase()}`,
       name: body.name,

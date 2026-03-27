@@ -1,7 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { createOrder, getOrders, generateOrderId } from "@/lib/db";
 import { sendBookingConfirmed } from "@/lib/email";
 import type { Order } from "@/types";
+
+const CreateOrderSchema = z.object({
+  size: z.enum(["S", "M", "L", "LL"]),
+  fromHotel: z.string().optional(),
+  fromHotelId: z.string().optional(),
+  toAddress: z.object({
+    recipientName: z.string().min(1),
+    facilityName: z.string().optional(),
+    street: z.string().min(1),
+    building: z.string().optional(),
+    city: z.string().min(1),
+    prefecture: z.string().min(1),
+    postalCode: z.string().min(1),
+    country: z.string().optional(),
+  }),
+  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "deliveryDate must be YYYY-MM-DD"),
+  guestName: z.string().min(1),
+  guestEmail: z.string().email(),
+  guestPhone: z.string().default(""),
+  basePrice: z.number().int().positive(),
+  destinationType: z.enum(["hotel", "airport", "depot", "station", "other"]).default("hotel"),
+  conditionPhotos: z.array(z.string()).optional(),
+});
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -11,13 +35,23 @@ export async function GET(req: NextRequest) {
   let orders = await getOrders();
   if (status)  orders = orders.filter((o) => o.status === status);
   if (hotelId) orders = orders.filter((o) => o.fromHotelId === hotelId);
+  const paymentFailed = searchParams.get("paymentFailed");
+  if (paymentFailed === "true") orders = orders.filter((o) => o.paymentFailed === true);
 
   return NextResponse.json(orders);
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const raw = await req.json();
+    const parsed = CreateOrderSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request", details: parsed.error.flatten().fieldErrors },
+        { status: 422 }
+      );
+    }
+    const body = parsed.data;
 
     const order: Order = {
       id: generateOrderId(),

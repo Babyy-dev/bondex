@@ -26,6 +26,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Payment intent does not match order" }, { status: 400 });
     }
 
+    // Idempotency: skip if already PAID (handles duplicate calls from client retries)
+    const { getOrder } = await import("@/lib/db");
+    const existing = await getOrder(orderId);
+    if (!existing) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+    if (existing.status === "PAID") {
+      return NextResponse.json({ success: true, alreadyPaid: true });
+    }
+
     await updateOrder(orderId, { status: "PAID", paymentIntentId: pi.id });
 
     return NextResponse.json({ success: true });

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { AlertTriangle, Package, Truck, ArrowRight, Clock } from "lucide-react"
+import { AlertTriangle, Package, Truck, ArrowRight, Clock, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getAllBookings, type StoredBooking } from "@/lib/booking-store"
 import type { Order as ApiOrder, OrderStatus } from "@/types"
@@ -12,34 +12,25 @@ interface DashboardOverviewProps {
   onViewOrders: (filter?: string) => void
 }
 
-// Mock fallback data
-const mockAllOrders = [
-  { id: "BX-A1B2C3", guest: "Tanaka Yuki", status: "in-transit", items: 2, actionRequired: false, actionLabel: "" },
-  { id: "BX-D4E5F6", guest: "Smith John", status: "checked-in", items: 1, actionRequired: true, actionLabel: "Payment failure" },
-  { id: "BX-G7H8I9", guest: "Mueller Hans", status: "delivered", items: 3, actionRequired: false, actionLabel: "" },
-  { id: "BX-J0K1L2", guest: "Lee Min-Jun", status: "pending", items: 1, actionRequired: true, actionLabel: "Uncollected luggage" },
-  { id: "BX-M3N4O5", guest: "Garcia Maria", status: "exception", items: 2, actionRequired: true, actionLabel: "Carrier exception" },
-  { id: "BX-P6Q7R8", guest: "Kim Soo-Jin", status: "delivered", items: 1, actionRequired: false, actionLabel: "" },
-  { id: "BX-S9T0U1", guest: "Williams Emma", status: "in-transit", items: 2, actionRequired: false, actionLabel: "" },
-  { id: "BX-V2W3X4", guest: "Brown David", status: "cancelled", items: 1, actionRequired: false, actionLabel: "" },
-]
-
 const INACTIVE_STATUSES: OrderStatus[] = ["DELIVERED", "AUTO_CANCELLED", "CARRIER_REFUSED"]
 
 function mapApiOrderForDashboard(o: ApiOrder) {
+  const paymentFailed = !!(o as ApiOrder & { paymentFailed?: boolean }).paymentFailed
   return {
     id: o.id,
     guest: o.guestName,
     status: o.status.toLowerCase().replace(/_/g, "-"),
     items: 1,
-    actionRequired: !!o.flagged,
-    actionLabel: o.flagged ? "Flagged" : "",
+    actionRequired: !!o.flagged || paymentFailed,
+    actionLabel: paymentFailed ? "Payment failed" : o.flagged ? "Flagged" : "",
+    paymentFailed,
   }
 }
 
 export function DashboardOverview({ onSelectOrder, onViewPaymentFailures, onViewOrders }: DashboardOverviewProps) {
   const [liveBookings, setLiveBookings] = useState<StoredBooking[]>([])
   const [apiOrders, setApiOrders] = useState<ReturnType<typeof mapApiOrderForDashboard>[]>([])
+  const [stats, setStats] = useState<{ today: { revenue: number; orders: number }; thisMonth: { revenue: number } } | null>(null)
 
   const fetchApiOrders = useCallback(() => {
     fetch("/api/orders")
@@ -56,6 +47,10 @@ export function DashboardOverview({ onSelectOrder, onViewPaymentFailures, onView
   useEffect(() => {
     fetchApiOrders()
     load()
+    fetch("/api/admin/stats")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setStats(d) })
+      .catch(() => {})
     const h = () => load()
     window.addEventListener("bondex-booking-updated", h)
     return () => window.removeEventListener("bondex-booking-updated", h)
@@ -73,11 +68,10 @@ export function DashboardOverview({ onSelectOrder, onViewPaymentFailures, onView
     }
   })
 
-  // Merge: API orders first, then sessionStorage, then mock — deduplicate by id
+  // Real data only: API orders first, then any sessionStorage orders not yet in DB
   const allOrders = [
     ...apiOrders,
     ...sessionOrders.filter((s) => !apiOrders.some((a) => a.id === s.id)),
-    ...mockAllOrders.filter((m) => !apiOrders.some((a) => a.id === m.id) && !sessionOrders.some((s) => s.id === m.id)),
   ]
 
   // Derive all counts from actual data
@@ -97,7 +91,7 @@ export function DashboardOverview({ onSelectOrder, onViewPaymentFailures, onView
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <button
           onClick={() => onViewOrders("action_required")}
           className="p-4 rounded-lg bg-card border border-border text-left hover:border-foreground/30 hover:shadow-sm transition-all group"
@@ -140,7 +134,52 @@ export function DashboardOverview({ onSelectOrder, onViewPaymentFailures, onView
             </div>
           </div>
         </button>
+        <div className="p-4 rounded-lg bg-card border border-border text-left">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">¥{stats?.today.revenue.toLocaleString() ?? "—"}</p>
+              <p className="text-sm text-muted-foreground">Today&apos;s revenue</p>
+              <p className="text-xs text-muted-foreground">Month: ¥{stats?.thisMonth.revenue.toLocaleString() ?? "—"}</p>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Alerts */}
+      {(() => {
+        const uncollected = allOrders.filter((o) => o.status === "paid")
+        const paymentFailed = allOrders.filter((o) => (o as { paymentFailed?: boolean }).paymentFailed)
+        if (uncollected.length === 0 && paymentFailed.length === 0) return null
+        return (
+          <div className="mb-8 space-y-2">
+            {uncollected.length > 0 && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted border border-border text-sm">
+                <AlertTriangle className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="text-foreground">
+                  <strong>{uncollected.length}</strong> order{uncollected.length > 1 ? "s" : ""} paid but not yet checked in
+                </span>
+                <Button variant="ghost" size="sm" className="ml-auto" onClick={() => onViewOrders("paid")}>
+                  View
+                </Button>
+              </div>
+            )}
+            {paymentFailed.length > 0 && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-destructive/5 border border-destructive/20 text-sm">
+                <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
+                <span className="text-foreground">
+                  <strong>{paymentFailed.length}</strong> order{paymentFailed.length > 1 ? "s" : ""} with payment failure
+                </span>
+                <Button variant="ghost" size="sm" className="ml-auto" onClick={onViewPaymentFailures}>
+                  View
+                </Button>
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Action required section */}
       <div className="mb-8">

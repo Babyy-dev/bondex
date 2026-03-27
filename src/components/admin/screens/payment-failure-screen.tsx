@@ -1,44 +1,55 @@
 "use client"
 
-import { ArrowLeft, AlertTriangle, CreditCard, ArrowRight, Info } from "lucide-react"
+import { useState, useEffect } from "react"
+import { ArrowLeft, AlertTriangle, CreditCard, ArrowRight, Info, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import type { Order } from "@/types"
 
 interface PaymentFailureScreenProps {
   onSelectOrder: (orderId: string) => void
   onBack: () => void
 }
 
-const failedPayments = [
-  { 
-    id: "BX-PAY001", 
-    guestName: "Smith John", 
-    guestEmail: "smith@example.com",
-    amount: 4500, 
-    type: "surcharge",
-    reason: "Card declined",
-    orderStatus: "in-transit",
-    createdAt: "2026-02-04T08:30:00Z"
-  },
-]
-
 export function PaymentFailureScreen({ onSelectOrder, onBack }: PaymentFailureScreenProps) {
+  const [failedOrders, setFailedOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchFailures = () => {
+    setLoading(true)
+    fetch("/api/orders?paymentFailed=true")
+      .then((res) => res.ok ? res.json() : [])
+      .then((data: Order[]) => {
+        if (Array.isArray(data)) setFailedOrders(data)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchFailures() }, [])
+
   return (
     <div className="p-6 lg:p-8 max-w-4xl">
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
-        <button 
+        <button
           onClick={onBack}
           className="p-2 -ml-2 rounded-lg hover:bg-muted transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <AlertTriangle className="w-6 h-6" />
             Payment Issues
           </h1>
-          <p className="text-muted-foreground">Failed payments requiring manual recovery</p>
+          <p className="text-muted-foreground">
+            {loading ? "Loading..." : `${failedOrders.length} failed payment${failedOrders.length !== 1 ? "s" : ""} requiring manual recovery`}
+          </p>
         </div>
+        <Button variant="outline" size="sm" onClick={fetchFailures} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
       </div>
 
       {/* Critical notice */}
@@ -49,7 +60,7 @@ export function PaymentFailureScreen({ onSelectOrder, onBack }: PaymentFailureSc
             <p className="font-medium text-foreground mb-1">Payment failure handling policy</p>
             <ul className="space-y-1 text-muted-foreground">
               <li>Shipment is <strong>NOT</strong> stopped for payment failures</li>
-              <li>Status remains unchanged - shipment continues as normal</li>
+              <li>Status remains unchanged — shipment continues as normal</li>
               <li>CS handles payment recovery manually</li>
             </ul>
           </div>
@@ -57,7 +68,12 @@ export function PaymentFailureScreen({ onSelectOrder, onBack }: PaymentFailureSc
       </div>
 
       {/* Failed payments list */}
-      {failedPayments.length > 0 ? (
+      {loading ? (
+        <div className="rounded-lg border border-border bg-card p-12 text-center">
+          <div className="w-8 h-8 border-2 border-border border-t-foreground rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-muted-foreground">Loading payment failures...</p>
+        </div>
+      ) : failedOrders.length > 0 ? (
         <div className="rounded-lg border border-border bg-card overflow-hidden">
           <table className="w-full">
             <thead className="bg-muted/50">
@@ -65,45 +81,47 @@ export function PaymentFailureScreen({ onSelectOrder, onBack }: PaymentFailureSc
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Order</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Guest</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Amount</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Reason</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Order Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {failedPayments.map((payment) => (
-                <tr key={payment.id} className="hover:bg-muted/30">
+              {failedOrders.map((order) => (
+                <tr key={order.id} className="hover:bg-muted/30">
                   <td className="px-4 py-4">
-                    <div>
-                      <p className="font-mono text-sm font-medium">{payment.id}</p>
-                      <p className="text-xs text-muted-foreground">{payment.type === "surcharge" ? "Surcharge" : "Initial"}</p>
-                    </div>
+                    <p className="font-mono text-sm font-medium">{order.id}</p>
                   </td>
                   <td className="px-4 py-4">
                     <div>
-                      <p className="text-sm font-medium">{payment.guestName}</p>
-                      <p className="text-xs text-muted-foreground">{payment.guestEmail}</p>
+                      <p className="text-sm font-medium">{order.guestName}</p>
+                      <p className="text-xs text-muted-foreground">{order.guestEmail}</p>
                     </div>
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-1">
                       <CreditCard className="w-4 h-4 text-muted-foreground" />
-                      <span className="font-medium">¥{payment.amount.toLocaleString()}</span>
+                      <span className="font-medium">¥{order.totalPrice.toLocaleString()}</span>
                     </div>
                   </td>
                   <td className="px-4 py-4">
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-destructive/10 text-destructive text-xs font-medium">
                       <AlertTriangle className="w-3 h-3" />
-                      {payment.reason}
+                      Payment failed
                     </span>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="px-2 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">
-                      {payment.orderStatus === "in-transit" ? "In transit" : payment.orderStatus}
+                    <span className="px-2 py-1 rounded-full bg-muted text-muted-foreground text-xs">
+                      {order.status.replace(/_/g, " ").toLowerCase().replace(/^\w/, c => c.toUpperCase())}
                     </span>
                   </td>
+                  <td className="px-4 py-4">
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(order.createdAt).toLocaleDateString("ja-JP")}
+                    </p>
+                  </td>
                   <td className="px-4 py-4 text-right">
-                    <Button size="sm" onClick={() => onSelectOrder(payment.id)}>
+                    <Button size="sm" onClick={() => onSelectOrder(order.id)}>
                       Handle
                       <ArrowRight className="w-4 h-4 ml-1" />
                     </Button>
@@ -119,9 +137,7 @@ export function PaymentFailureScreen({ onSelectOrder, onBack }: PaymentFailureSc
             <CreditCard className="w-8 h-8 text-muted-foreground" />
           </div>
           <h3 className="font-medium text-foreground mb-1">No payment issues</h3>
-          <p className="text-sm text-muted-foreground">
-            All payments are processing normally
-          </p>
+          <p className="text-sm text-muted-foreground">All payments are processing normally</p>
         </div>
       )}
     </div>

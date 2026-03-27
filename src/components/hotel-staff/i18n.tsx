@@ -145,13 +145,24 @@ const translations: Record<string, Record<Locale, string>> = {
 
 const I18nContext = createContext<I18nContextType | null>(null)
 
+const STORAGE_KEY = "bondex_lang"
+
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocale] = useState<Locale>(() => {
+  const [locale, setLocaleState] = useState<Locale>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(STORAGE_KEY) as Locale | null
+      if (stored === "en" || stored === "ja") return stored
+    }
     if (typeof navigator !== "undefined") {
       return navigator.language.startsWith("ja") ? "ja" : "en"
     }
     return "en"
   })
+
+  const setLocale = (l: Locale) => {
+    setLocaleState(l)
+    if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, l)
+  }
 
   const t = (key: string): string => {
     return translations[key]?.[locale] ?? key

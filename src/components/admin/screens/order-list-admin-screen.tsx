@@ -82,11 +82,10 @@ export function OrderListAdminScreen({ onSelectOrder, onBack, initialFilter = "a
     return () => window.removeEventListener("bondex-booking-updated", h)
   }, [fetchApiOrders, load])
 
-  // Merge: API orders first, then sessionStorage, then mock — deduplicate by id
+  // Merge: API orders first, then sessionStorage — no hardcoded mock data
   const allOrders = [
     ...apiOrders,
     ...liveOrders.filter((l) => !apiOrders.some((a) => a.id === l.id)),
-    ...mockOrders.filter((m) => !apiOrders.some((a) => a.id === m.id) && !liveOrders.some((l) => l.id === m.id)),
   ]
 
   const filteredOrders = allOrders.filter(order => {

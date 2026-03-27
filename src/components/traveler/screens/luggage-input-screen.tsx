@@ -83,20 +83,6 @@ const SIZE_INFO: Record<Size, {
   },
 }
 
-function estimateSizeFromPhoto(_photoUrl: string): { size: Size; confidence: number } {
-  const sizes: Size[] = ["S", "M", "L", "LL"]
-  const weights = [0.2, 0.45, 0.25, 0.1]
-  const rand = Math.random()
-  let cumulative = 0
-  for (let i = 0; i < sizes.length; i++) {
-    cumulative += weights[i]
-    if (rand <= cumulative) {
-      return { size: sizes[i], confidence: 0.7 + Math.random() * 0.25 }
-    }
-  }
-  return { size: "M", confidence: 0.8 }
-}
-
 const PROHIBITED_ITEMS = [
   { icon: Banknote, label: "Cash & valuables" },
   { icon: Flame, label: "Dangerous goods" },
@@ -149,20 +135,8 @@ export function LuggageInputScreen({ data, onUpdate, onNext, onBack }: LuggageIn
     const item = items.find((i) => i.id === itemId)
     if (!item || item.photos.length >= 2) return
 
-    const isFirstPhoto = item.photos.length === 0
     const newPhotos = [...item.photos, url]
-
-    if (isFirstPhoto) {
-      const estimation = estimateSizeFromPhoto(url)
-      updateItem(itemId, {
-        photos: newPhotos,
-        size: estimation.size,
-        estimatedWeight: SIZE_INFO[estimation.size].defaultWeight.toString(),
-        autoDetected: true,
-      })
-    } else {
-      updateItem(itemId, { photos: newPhotos })
-    }
+    updateItem(itemId, { photos: newPhotos })
 
     e.target.value = ""
   }

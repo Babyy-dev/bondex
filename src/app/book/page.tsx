@@ -9,6 +9,8 @@ function BookContent() {
   const searchParams = useSearchParams()
   const [initialStep, setInitialStep] = useState<string | null>("destination")
 
+  const hotelId = searchParams.get("hotel") ?? null
+
   useEffect(() => {
     const paymentIntent = searchParams.get("payment_intent")
     const redirectStatus = searchParams.get("redirect_status")
@@ -36,6 +38,7 @@ function BookContent() {
     <TravelerFlow
       onBack={() => router.push("/")}
       initialStep={initialStep}
+      initialHotelId={hotelId}
     />
   )
 }

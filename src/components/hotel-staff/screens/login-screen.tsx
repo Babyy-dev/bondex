@@ -36,8 +36,10 @@ export function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
         body: JSON.stringify({ facilityId: code, password, role: "hotel" }),
       })
       if (res.ok) {
+        const data = await res.json().catch(() => ({}))
         sessionStorage.setItem("bondex_hotel_session", JSON.stringify({
           hotelCode: code,
+          hotelName: data.hotelName || code,
           loginAt: Date.now(),
           expiresAt: Date.now() + 8 * 60 * 60 * 1000,
         }))
@@ -62,6 +64,7 @@ export function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
     }
     sessionStorage.setItem("bondex_hotel_session", JSON.stringify({
       hotelCode: code,
+      hotelName: code,
       loginAt: Date.now(),
       expiresAt: Date.now() + 8 * 60 * 60 * 1000,
     }))

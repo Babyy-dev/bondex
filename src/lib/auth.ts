@@ -43,9 +43,16 @@ const HOTEL_CREDS: Record<string, { password: string; name: string }> = {
 };
 
 // Admin credentials from env vars — falls back to demo values in development only
+const _adminPassword = process.env.ADMIN_PASSWORD ?? "admin123";
+if (process.env.NODE_ENV === "production" && _adminPassword === "admin123") {
+  throw new Error(
+    "[BondEx] ADMIN_PASSWORD is using the default insecure value in production. " +
+    "Set ADMIN_PASSWORD to a strong random password in your environment."
+  );
+}
 const ADMIN_CREDS = {
   username: process.env.ADMIN_USERNAME ?? "admin",
-  password: process.env.ADMIN_PASSWORD ?? "admin123",
+  password: _adminPassword,
 };
 
 export function validateHotelCreds(id: string, password: string) {

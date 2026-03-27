@@ -40,12 +40,12 @@ interface CompletionScreenProps {
 
 export function CompletionScreen({ data, onViewStatus }: CompletionScreenProps) {
   const [copied, setCopied] = useState(false)
-  const orderId = data.orderId || "BX-DEMO123"
+  const orderId = data.orderId || ""
   const pickupHotel = data.fromHotel || "Hotel front desk"
-  const deliveryDest = data.destination.name || "Narita Airport Terminal 1"
-  const deliveryDate = data.deliveryDate.selected || "Feb 8, 2026"
+  const deliveryDest = data.destination.name || ""
+  const deliveryDate = data.deliveryDate.selected || ""
   const itemCount = data.items.length || 1
-  const checkInDate = data.destination.checkInDate || "Feb 7, 2026"
+  const checkInDate = data.destination.checkInDate || ""
 
   const handleCopy = () => {
     navigator.clipboard.writeText(orderId)

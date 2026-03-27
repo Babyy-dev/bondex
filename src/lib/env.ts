@@ -25,16 +25,28 @@ function optionalEnv(name: string, fallback = ""): string {
 
 // ── Critical — app will not start without these ───────────────────────────
 
+// SESSION_SECRET: warn loudly in production if using the insecure default
+const _sessionSecret = optionalEnv("SESSION_SECRET", "default-secret-change-in-production");
+if (
+  process.env.NODE_ENV === "production" &&
+  _sessionSecret === "default-secret-change-in-production"
+) {
+  throw new Error(
+    "[BondEx] SESSION_SECRET is using the default insecure value in production. " +
+    "Set SESSION_SECRET to a strong random string in your environment."
+  );
+}
+
 export const env = {
-  // Database
+  // Database (mongodb.ts validates MONGODB_URI separately at module load)
   MONGODB_URI: optionalEnv("MONGODB_URI"),
 
   // Auth
-  SESSION_SECRET: optionalEnv("SESSION_SECRET", "default-secret-change-in-production"),
+  SESSION_SECRET: _sessionSecret,
 
-  // Stripe (required for payments)
-  STRIPE_SECRET_KEY:     optionalEnv("STRIPE_SECRET_KEY"),
-  STRIPE_WEBHOOK_SECRET: optionalEnv("STRIPE_WEBHOOK_SECRET"),
+  // Stripe — required; app will throw at startup if missing in any environment
+  STRIPE_SECRET_KEY:     requireEnv("STRIPE_SECRET_KEY"),
+  STRIPE_WEBHOOK_SECRET: requireEnv("STRIPE_WEBHOOK_SECRET"),
 
   // Ship&Co (optional — falls back to mock label if missing)
   SHIPCO_API_KEY:      optionalEnv("SHIPCO_API_KEY"),

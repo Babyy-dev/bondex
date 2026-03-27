@@ -8,8 +8,11 @@ import { PaymentFailureScreen } from "./screens/payment-failure-screen"
 import { OrderListAdminScreen } from "./screens/order-list-admin-screen"
 import { HotelListScreen } from "./screens/hotel-list-screen"
 import { HotelRegisterScreen } from "./screens/hotel-register-screen"
+import { HotelDetailScreen } from "./screens/hotel-detail-screen"
+import { QrTagsScreen } from "./screens/qr-tags-screen"
+import { PayoutsScreen } from "./screens/payouts-screen"
 
-type Screen = "overview" | "orders" | "order-detail" | "payment-failure" | "hotels" | "hotel-register"
+type Screen = "overview" | "orders" | "order-detail" | "payment-failure" | "hotels" | "hotel-register" | "hotel-detail" | "qr-tags" | "payouts"
 
 interface AdminDashboardProps {
   onBack: () => void
@@ -35,12 +38,13 @@ export interface AdminOrder {
 
 export function AdminDashboard({ onBack, initialScreen, initialOrderId }: AdminDashboardProps) {
   const [currentScreen, setCurrentScreen] = useState<Screen>(() => {
-    if (initialScreen && ["overview", "orders", "order-detail", "payment-failure", "hotels", "hotel-register"].includes(initialScreen)) {
+    if (initialScreen && ["overview", "orders", "order-detail", "payment-failure", "hotels", "hotel-register", "qr-tags", "payouts"].includes(initialScreen)) {
       return initialScreen as Screen
     }
     return "overview"
   })
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(initialOrderId ?? null)
+  const [selectedHotelId, setSelectedHotelId] = useState<string | null>(null)
   const [orderListFilter, setOrderListFilter] = useState<string>("all")
 
   const handleSelectOrder = (orderId: string) => {
@@ -105,6 +109,7 @@ export function AdminDashboard({ onBack, initialScreen, initialOrderId }: AdminD
         {currentScreen === "hotels" && (
           <HotelListScreen
             onAddHotel={() => setCurrentScreen("hotel-register")}
+            onSelectHotel={(id) => { setSelectedHotelId(id); setCurrentScreen("hotel-detail") }}
             onBack={handleBackToOverview}
           />
         )}
@@ -112,6 +117,20 @@ export function AdminDashboard({ onBack, initialScreen, initialOrderId }: AdminD
           <HotelRegisterScreen
             onBack={() => setCurrentScreen("hotels")}
           />
+        )}
+        {currentScreen === "hotel-detail" && selectedHotelId && (
+          <HotelDetailScreen
+            hotelId={selectedHotelId}
+            onBack={() => { setSelectedHotelId(null); setCurrentScreen("hotels") }}
+          />
+        )}
+        {currentScreen === "qr-tags" && (
+          <QrTagsScreen
+            onBack={handleBackToOverview}
+          />
+        )}
+        {currentScreen === "payouts" && (
+          <PayoutsScreen onBack={handleBackToOverview} />
         )}
       </main>
     </div>

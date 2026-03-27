@@ -18,6 +18,16 @@ function getTransport() {
   });
 }
 
+/** Escape user-controlled strings before interpolating into HTML email bodies */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 async function send(to: string, subject: string, html: string) {
   const transport = getTransport();
   if (!transport) {
@@ -132,6 +142,60 @@ export async function sendAutoCancelled(order: Order) {
       </p>
 
       <p style="font-size:11px;color:#B0A090;text-align:center;margin-top:24px;">BondEx – Japan Luggage Delivery</p>
+    </div>
+    `
+  );
+}
+
+export async function sendHandedToCarrier(order: Order) {
+  const appUrl = env.APP_URL;
+  await send(
+    order.guestEmail,
+    "BondEx – Luggage Picked Up by Carrier",
+    `
+    <div style="font-family:sans-serif;max-width:480px;margin:auto;background:#FEFCF8;padding:32px;border-radius:16px;">
+      <h1 style="font-size:24px;color:#1A120B;">Picked Up 🚚</h1>
+      <p style="color:#8B7355;margin-bottom:20px;">Your luggage has been collected by the carrier and is on its way.</p>
+      ${order.trackingNumber ? `
+      <div style="background:#fff;border-radius:12px;padding:20px;border:1px solid #EDE8DF;margin-bottom:20px;">
+        <p style="margin:0 0 6px;font-size:12px;color:#B0A090;text-transform:uppercase;letter-spacing:.05em;">Tracking Number</p>
+        <p style="margin:0;font-family:monospace;font-size:18px;font-weight:700;color:#1A120B;">${order.trackingNumber}</p>
+        <p style="margin:4px 0 0;font-size:12px;color:#8B7355;">${order.carrier ?? ""}</p>
+      </div>
+      ` : ""}
+      <div style="background:#fff;border-radius:12px;padding:20px;border:1px solid #EDE8DF;margin-bottom:20px;">
+        <p style="margin:0 0 6px;font-size:12px;color:#B0A090;">DELIVERING TO</p>
+        <p style="margin:0;font-weight:600;color:#1A120B;">${order.toAddress.facilityName ?? order.toAddress.city}</p>
+        <p style="margin:4px 0 0;color:#8B7355;font-size:13px;">Expected: ${order.deliveryDate}</p>
+      </div>
+      <a href="${appUrl}/status/${order.id}"
+        style="display:block;text-align:center;background:#1A120B;color:#fff;padding:14px;border-radius:12px;text-decoration:none;font-weight:600;margin-bottom:20px;">
+        Track Delivery →
+      </a>
+      <p style="font-size:11px;color:#B0A090;text-align:center;">BondEx – Japan Luggage Delivery</p>
+    </div>
+    `
+  );
+}
+
+export async function sendExceptionAlert(order: Order) {
+  const csEmail = env.SMTP_FROM ?? "support@bondex.jp";
+  await send(
+    csEmail,
+    `[BondEx Alert] Exception on Order ${order.id}`,
+    `
+    <div style="font-family:sans-serif;max-width:480px;margin:auto;background:#FEFCF8;padding:32px;border-radius:16px;">
+      <h1 style="font-size:20px;color:#991B1B;">⚠️ Exception Flagged</h1>
+      <p style="color:#8B7355;">An order has been flagged and requires CS attention.</p>
+      <div style="background:#fff;border-radius:12px;padding:20px;border:1px solid #EDE8DF;margin:20px 0;">
+        <p style="margin:0 0 6px;font-size:12px;color:#B0A090;">ORDER</p>
+        <p style="margin:0;font-family:monospace;font-weight:700;color:#1A120B;">${order.id}</p>
+        <p style="margin:8px 0 0 0;color:#8B7355;">Guest: ${order.guestName} · ${order.guestEmail}</p>
+        <p style="margin:4px 0 0;color:#8B7355;">Status: ${order.status} · Size: ${order.size}</p>
+        <p style="margin:4px 0 0;color:#8B7355;">Hotel: ${order.fromHotel}</p>
+        ${order.csNote ? `<p style="margin:8px 0 0;color:#1A120B;font-style:italic;">"${escapeHtml(order.csNote)}"</p>` : ""}
+      </div>
+      <p style="font-size:11px;color:#B0A090;text-align:center;">BondEx Admin · Please investigate and resolve.</p>
     </div>
     `
   );

@@ -43,7 +43,7 @@ export const ISSUE_TEMPLATES: Record<IssueType, { title: string; body: string; t
 
 export interface StoredBooking {
   orderId: string
-  status: "confirmed" | "waiting" | "checked_in" | "picked_up" | "in_transit" | "delivered"
+  status: "confirmed" | "waiting" | "checked_in" | "picked_up" | "in_transit" | "delivered" | "carrier_refused" | "auto_cancelled"
   createdAt: string
 
   // Destination (Step 1)
@@ -101,10 +101,12 @@ function writeAll(bookings: StoredBooking[]): void {
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(bookings))
 }
 
-/** Generate a BDX-XXXX order ID */
+/** Generate a client-side demo order ID (session-storage only, not used server-side) */
 export function generateOrderId(): string {
-  const num = Math.floor(1000 + Math.random() * 9000)
-  return `BDX-${num}`
+  // Use timestamp + random to reduce collisions in the same session
+  const ts  = Date.now().toString(36).toUpperCase();
+  const rnd = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `BDX-${ts}${rnd}`;
 }
 
 /** Save a new booking from Traveler flow */

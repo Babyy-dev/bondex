@@ -20,6 +20,7 @@ export interface SizeInfo {
   maxWeight: string;
   price: number;
   maxPrice: number;
+  carrierCost?: number;
 }
 
 export interface Address {
@@ -46,6 +47,9 @@ export interface Order {
   guestPhone: string;
   basePrice: number;
   totalPrice: number;
+  zone?: number;
+  actualCarrierCost?: number;
+  payoutAmount?: number;
   trackingNumber?: string;
   carrier?: string;
   qrCode?: string;
@@ -54,10 +58,12 @@ export interface Order {
   checkedInAt?: string;
   destinationType: DestinationType;
   paymentIntentId?: string;
+  paymentFailed?: boolean;
   labelUrl?: string;
   shipcoShipmentId?: string;
   photoUrls?: string[];
   flagged?: boolean;
+  csNote?: string;
 }
 
 export interface Hotel {
@@ -85,6 +91,16 @@ export interface Hotel {
   storageLocation?: string;
   operationalNotes?: string;
   receiptStartTime?: string;
+}
+
+export interface QrTag {
+  id: string;           // e.g. "TAG-0001"
+  hotelId: string;
+  status: "unused" | "assigned" | "invalidated";
+  orderId?: string;
+  createdAt: string;
+  assignedAt?: string;
+  invalidatedAt?: string;
 }
 
 export interface BookingState {

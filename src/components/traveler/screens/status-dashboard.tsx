@@ -41,7 +41,7 @@ export function StatusDashboard({ data, onBack }: StatusDashboardProps) {
   const [dismissedMessages, setDismissedMessages] = useState<Set<string>>(new Set())
   const [apiOrder, setApiOrder] = useState<Order | null>(null)
 
-  const orderId = data.orderId || "BX-DEMO123"
+  const orderId = data.orderId || ""
 
   // Fetch real order from API
   const fetchOrder = useCallback(() => {
@@ -105,8 +105,8 @@ export function StatusDashboard({ data, onBack }: StatusDashboardProps) {
   // Use real tracking number from API if available
   const trackingNumber = apiOrder?.trackingNumber || "—"
   const carrierName = apiOrder?.carrier || "Yamato Transport"
-  const deliveryDest = data.destination.name || "Narita Airport Terminal 1"
-  const deliveryDate = data.deliveryDate.selected || "Feb 8, 2026"
+  const deliveryDest = apiOrder?.toAddress?.facilityName || data.destination.name || ""
+  const deliveryDate = apiOrder?.deliveryDate || data.deliveryDate.selected || ""
 
   const trackingAvailableStatuses: StatusKey[] = ["in-transit", "delivered"]
   const showTracking = trackingAvailableStatuses.includes(currentStatus) && trackingNumber !== "—"

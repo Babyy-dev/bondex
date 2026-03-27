@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrder } from "@/lib/db";
 
+/** Escape XML/SVG special characters to prevent SVG injection */
+function x(str: string | undefined | null): string {
+  return (str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ orderId: string }> }
@@ -8,11 +18,11 @@ export async function GET(
   const { orderId } = await params;
   const order = await getOrder(orderId);
 
-  const trackingNumber = order?.trackingNumber ?? `MOCK-${orderId}`;
-  const guestName = order?.guestName ?? "Guest";
+  const trackingNumber = x(order?.trackingNumber ?? `MOCK-${orderId}`);
+  const guestName = x(order?.guestName ?? "Guest");
   const toAddress = order?.toAddress;
-  const size = order?.size ?? "M";
-  const deliveryDate = order?.deliveryDate ?? "—";
+  const size = x(order?.size ?? "M");
+  const deliveryDate = x(order?.deliveryDate ?? "—");
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="560" viewBox="0 0 400 560">
@@ -40,10 +50,10 @@ export async function GET(
 
   <!-- To Address -->
   <text x="20" y="215" font-family="monospace" font-size="11" fill="#555">TO:</text>
-  <text x="20" y="235" font-family="monospace" font-size="14" font-weight="bold" fill="#000">${toAddress?.recipientName ?? guestName}</text>
-  <text x="20" y="253" font-family="monospace" font-size="12" fill="#333">${toAddress?.facilityName ?? ""}</text>
-  <text x="20" y="270" font-family="monospace" font-size="12" fill="#333">${toAddress?.street ?? ""} ${toAddress?.building ?? ""}</text>
-  <text x="20" y="287" font-family="monospace" font-size="12" fill="#333">${toAddress?.city ?? ""}, ${toAddress?.prefecture ?? ""} ${toAddress?.postalCode ?? ""}</text>
+  <text x="20" y="235" font-family="monospace" font-size="14" font-weight="bold" fill="#000">${x(toAddress?.recipientName) || guestName}</text>
+  <text x="20" y="253" font-family="monospace" font-size="12" fill="#333">${x(toAddress?.facilityName)}</text>
+  <text x="20" y="270" font-family="monospace" font-size="12" fill="#333">${x(toAddress?.street)} ${x(toAddress?.building)}</text>
+  <text x="20" y="287" font-family="monospace" font-size="12" fill="#333">${x(toAddress?.city)}, ${x(toAddress?.prefecture)} ${x(toAddress?.postalCode)}</text>
   <text x="20" y="304" font-family="monospace" font-size="12" fill="#333">Japan</text>
 
   <!-- Divider -->
@@ -51,7 +61,7 @@ export async function GET(
 
   <!-- Details -->
   <text x="20" y="345" font-family="monospace" font-size="11" fill="#555">ORDER ID</text>
-  <text x="20" y="362" font-family="monospace" font-size="13" fill="#000">${orderId}</text>
+  <text x="20" y="362" font-family="monospace" font-size="13" fill="#000">${x(orderId)}</text>
 
   <text x="200" y="345" font-family="monospace" font-size="11" fill="#555">SIZE</text>
   <text x="200" y="362" font-family="monospace" font-size="13" fill="#000">${size}</text>

@@ -1,6 +1,6 @@
 "use client"
 
-import { LayoutDashboard, Package, AlertTriangle, ArrowLeft, Shield, Building2 } from "lucide-react"
+import { LayoutDashboard, Package, AlertTriangle, ArrowLeft, Shield, Building2, Tag, TrendingUp } from "lucide-react"
 
 interface AdminSidebarProps {
   currentScreen: string
@@ -14,6 +14,8 @@ export function AdminSidebar({ currentScreen, onNavigate, onBack }: AdminSidebar
     { id: "orders", label: "All Orders", icon: Package },
     { id: "hotels", label: "Hotels", icon: Building2 },
     { id: "payment-failure", label: "Payment Issues", icon: AlertTriangle },
+    { id: "qr-tags", label: "QR Tags", icon: Tag },
+    { id: "payouts", label: "Revenue & Payouts", icon: TrendingUp },
   ]
 
   return (

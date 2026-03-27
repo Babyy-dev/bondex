@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
+import { getStripe } from "@/lib/stripe";
 import { getOrder, updateOrder } from "@/lib/db";
 import { getSizeInfo } from "@/lib/pricing";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "", {
-  apiVersion: "2026-02-25.clover" as never,
-});
+const stripe = getStripe();
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,16 +35,19 @@ export async function POST(req: NextRequest) {
     }
 
     // Charge the difference off-session
-    const pi = await stripe.paymentIntents.create({
-      amount: diff,
-      currency: "jpy",
-      customer: customer ?? undefined,
-      payment_method: paymentMethod,
-      confirm: true,
-      off_session: true,
-      description: `BondEx size adjustment ${order.size}→${newSize} (${orderId})`,
-      metadata: { orderId, originalSize: order.size, newSize },
-    });
+    const pi = await stripe.paymentIntents.create(
+      {
+        amount: diff,
+        currency: "jpy",
+        customer: customer ?? undefined,
+        payment_method: paymentMethod,
+        confirm: true,
+        off_session: true,
+        description: `BondEx size adjustment ${order.size}→${newSize} (${orderId})`,
+        metadata: { orderId, originalSize: order.size, newSize },
+      },
+      { idempotencyKey: `size-diff-${orderId}-${order.size}-${newSize}` }
+    );
 
     await updateOrder(orderId, {
       size: newSize,

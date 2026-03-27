@@ -48,22 +48,50 @@ export interface ShipcoShipment {
   label_url: string;
   carrier: string;
   status: string;
+  rate?: number;
+  cost?: number;
 }
 
 async function shipcoFetch(path: string, options: RequestInit = {}) {
-  const res = await fetch(`${SHIPCO_API_BASE}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${SHIPCO_API_KEY}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      ...(options.headers ?? {}),
-    },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000); // 15 s timeout
+
+  let res: Response;
+  try {
+    res = await fetch(`${SHIPCO_API_BASE}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${SHIPCO_API_KEY}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(options.headers ?? {}),
+      },
+    });
+  } catch (err) {
+    if ((err as Error)?.name === "AbortError") {
+      throw new Error(`Ship&Co API timeout after 15s (${path})`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
-    const error = await res.text();
-    throw new Error(`Ship&Co API error ${res.status}: ${error}`);
+    let errorMessage = `Ship&Co API error ${res.status}`;
+    try {
+      const contentType = res.headers.get("content-type") ?? "";
+      if (contentType.includes("application/json")) {
+        const errJson = await res.json();
+        errorMessage += `: ${errJson?.message ?? errJson?.error ?? JSON.stringify(errJson)}`;
+      } else {
+        const text = await res.text();
+        if (text && text.length < 500) errorMessage += `: ${text}`;
+      }
+    } catch {
+      // ignore parse errors — use the status-only message
+    }
+    throw new Error(errorMessage);
   }
 
   return res.json();
@@ -77,6 +105,7 @@ export async function createShipment(params: CreateShipmentParams): Promise<Ship
       setup: {
         date: params.deliveryDate,
         type: "delivery",
+        no_customer_notification: true,
         ...(params.carrier ? { carrier: params.carrier } : {}),
       },
       from_address: params.fromAddress,
@@ -105,6 +134,8 @@ export async function createShipment(params: CreateShipmentParams): Promise<Ship
     label_url: data.label_url ?? data.shipment?.label_url,
     carrier: data.carrier ?? "yamato",
     status: data.status ?? "created",
+    rate: data.rate ?? data.shipment?.rate,
+    cost: data.cost ?? data.shipment?.cost ?? data.rate?.total,
   };
 }
 
